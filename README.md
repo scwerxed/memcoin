@@ -67,7 +67,8 @@ erkennbar waere.
 | `size` | Positionsgroesse und Preiseinfluss berechnen |
 | `math` | Erwartungswert und Ruinrisiko durchrechnen |
 | `paper` | Handelsjournal fuehren und auswerten |
-| `watch <mint>` | Token beobachten, Phasenwechsel melden |
+| `monitor` | **Dauerbetrieb:** neue Token erfassen, reifen lassen, bei Eignung melden |
+| `watch <mint>` | Einzelnen Token beobachten, Phasenwechsel melden |
 | `demo` | Beispielausgabe ohne Netzwerk |
 
 ### Der wichtigste Befehl
@@ -111,6 +112,132 @@ python3 run.py paper open --mint <mint> --symbol WIF --price 0.0012 \
 python3 run.py paper close --id 1 --price 0.0031
 python3 run.py paper stats
 ```
+
+---
+
+## Dauerbetrieb: neue Token automatisch verfolgen
+
+```bash
+python3 run.py monitor
+```
+
+### Warum das kein Launch-Alarm ist
+
+Ein gerade gestarteter Token faellt durch die eigenen Filter dieses Werkzeugs.
+Unter zehn Minuten Alter sind Liquiditaet, Kaufverhaeltnis und Umschlag
+Rauschen - deshalb steht dort ein Ausschlusskriterium. Ein Alarm im Moment
+des Starts waere also eine Meldung ueber etwas, das noch niemand bewerten
+kann, dich selbst eingeschlossen.
+
+Der Monitor arbeitet deshalb anders:
+
+1. **Erfassen.** Neue Token wandern auf eine Beobachtungsliste (SQLite,
+   uebersteht Neustarts). Es passiert erst einmal nichts.
+2. **Reifen lassen.** Jeder Token wird nach Alter gestaffelt nachverfolgt -
+   in den ersten Minuten alle 90 Sekunden, spaeter immer seltener. Das
+   Anfragebudget bekommt der, bei dem sich noch etwas entscheidet.
+3. **Aussortieren.** Wer abgezogene Liquiditaet, keinen Fluss mehr oder zu
+   viel Alter zeigt, fliegt von der Liste. Das ist der Regelfall.
+4. **Melden.** Alarm gibt es erst, wenn ein Token bewertbar geworden ist,
+   **kein** Ausschlusskriterium erfuellt und die Punkteschwelle erreicht.
+
+Der Nebeneffekt ist der eigentliche Gewinn: **du siehst einen Token
+frueher als jede Signalgruppe**, weil du nicht darauf wartest, dass jemand
+ihn dir schickt - und du siehst ihn *nicht* in der Blowoff-Phase, weil
+genau die den Alarm unterdrueckt.
+
+### Zwei Alarmarten
+
+| Art | Wann | Bedeutung |
+|---|---|---|
+| `FILTER BESTANDEN` | Token wird bewertbar und besteht alle Pruefungen | Kein Kaufsignal - die Erlaubnis, ihn ueberhaupt anzusehen |
+| `BLOWOFF - AUSSTIEGSSIGNAL` | Ein bereits gemeldeter Token laeuft senkrecht | Falls du drin bist: hier wird verkauft, nicht nachgekauft |
+
+Jeder Token wird **genau einmal** als Kandidat gemeldet. Kein Dauerfeuer.
+
+### Benachrichtigung per Telegram
+
+```bash
+export TELEGRAM_BOT_TOKEN="123456:ABC..."
+export TELEGRAM_CHAT_ID="deine-chat-id"
+python3 run.py monitor --telegram --log-file alarme.jsonl
+```
+
+Bot anlegen bei **@BotFather**, dann dem eigenen Bot einmal schreiben und die
+Chat-ID unter `https://api.telegram.org/bot<TOKEN>/getUpdates` ablesen.
+
+Das ist die sinnvolle Nutzung von Telegram in diesem Zusammenhang: **dein
+eigener Kanal, in den nur deine eigene Analyse laeuft** - statt eines Kanals,
+in dem dir jemand anderes sagt, was du kaufen sollst.
+
+### Einstellungen
+
+```bash
+python3 run.py monitor \
+    --min-score 60 \           # strenger melden (Standard 55)
+    --discovery-interval 300 \ # Sekunden zwischen Suchlaeufen
+    --rpm 50 \                 # Anfragebudget/Min. (API-Limit ca. 60)
+    --max-watchlist 400 \      # Obergrenze der Beobachtungsliste
+    --log-file alarme.jsonl     # Alarme als JSON-Zeilen mitschreiben
+```
+
+`--once` macht genau einen Durchlauf und beendet sich - fuer cron oder die
+Windows-Aufgabenplanung.
+
+### Dauerhaft laufen lassen
+
+**Linux/macOS, einfachste Variante** (laeuft weiter, wenn du das Terminal
+schliesst):
+
+```bash
+nohup python3 run.py monitor --telegram --log-file alarme.jsonl > monitor.log 2>&1 &
+```
+
+Beenden mit `pkill -f "run.py monitor"`.
+
+**Linux, sauber als Dienst** (`/etc/systemd/system/memecoin-radar.service`):
+
+```ini
+[Unit]
+Description=memecoin-radar Monitor
+After=network-online.target
+
+[Service]
+Type=simple
+User=DEIN-BENUTZER
+WorkingDirectory=/pfad/zu/memcoin
+Environment=TELEGRAM_BOT_TOKEN=123456:ABC...
+Environment=TELEGRAM_CHAT_ID=...
+ExecStart=/usr/bin/python3 run.py monitor --telegram --log-file alarme.jsonl
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable --now memecoin-radar
+journalctl -u memecoin-radar -f     # mitlesen
+```
+
+**Windows:** Aufgabenplanung oeffnen, neue Aufgabe, Trigger "Bei Anmeldung",
+Aktion `python` mit den Argumenten `run.py monitor --telegram` und dem
+Ordner `memcoin` als Startverzeichnis.
+
+### Was der Monitor nicht kann
+
+- **Er kauft nicht.** Bewusst so. Ein Werkzeug ohne Schluesselmaterial kann
+  keine Mittel verlieren, und ein automatischer Einstieg in eine Anlageklasse
+  mit dieser Verlustquote ist keine Automatisierung, sondern ein Abfluss.
+- **Er ist nicht schneller als Sniper-Bots.** Die kaufen in derselben Sekunde
+  wie der Ersteller, ueber direkte Knotenanbindung. Dagegen gewinnst du mit
+  Polling nicht - und du willst es auch nicht, denn genau diese Token sind
+  die, bei denen die Daten noch Rauschen sind.
+- **Er findet keine Gewinner.** Er sortiert Verlierer aus und meldet, was
+  uebrig bleibt. Von dem Rest geht der Grossteil trotzdem auf null.
+- **Ruhige Tage sind normal.** Wenn tagelang kein Alarm kommt, funktioniert
+  der Filter - er findet nichts, weil meistens nichts da ist.
 
 ---
 
@@ -243,9 +370,11 @@ radar/
   scoring.py   Ausschlusskriterien, Punktebewertung, Phasenerkennung
   risk.py      Positionsgroesse, Preiseinfluss (x*y=k), Erwartungswert, Ruinrisiko
   journal.py   SQLite-Handelsjournal mit Auswertung
+  monitor.py   Dauerbetrieb: Beobachtungsliste, Reifeplanung, Anfragebudget
+  notify.py    Benachrichtigungskanaele (Konsole, Datei, Telegram)
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         34 Tests: python3 -m unittest discover -s tests
+tests/         62 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

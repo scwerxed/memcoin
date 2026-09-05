@@ -3,3 +3,6 @@ __pycache__/
 *.sqlite3
 radar-journal.sqlite3
 .venv/
+*.jsonl
+radar-watchlist.sqlite3
+monitor.log

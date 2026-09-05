@@ -9,6 +9,8 @@ import time
 from .config import Settings
 from .journal import Journal, format_timestamp
 from .model import TokenSnapshot
+from .monitor import Monitor, MonitorConfig, Watchlist
+from .notify import build_notifiers
 from .report import render_plan, render_verdict
 from .risk import expectancy, plan_position, required_win_rate, risk_of_ruin
 from .scoring import Stage, evaluate
@@ -288,6 +290,48 @@ def cmd_demo(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def cmd_monitor(args: argparse.Namespace, settings: Settings) -> int:
+    """Dauerbetrieb: neue Token erfassen, reifen lassen, bei Eignung melden."""
+    dex, _ = _clients(settings)
+
+    try:
+        notifier = build_notifiers(
+            console=not args.no_console,
+            file_path=args.log_file,
+            telegram=args.telegram,
+        )
+    except ValueError as exc:
+        print(f"Benachrichtigung nicht einrichtbar: {exc}", file=sys.stderr)
+        return 2
+
+    config = MonitorConfig(
+        min_score=args.min_score,
+        discovery_interval=args.discovery_interval,
+        requests_per_minute=args.rpm,
+        max_watchlist=args.max_watchlist,
+        tick_seconds=args.tick,
+    )
+
+    print("Monitor gestartet.")
+    print(f"  Meldeschwelle       Score >= {config.min_score}, keine Ausschlusskriterien")
+    print(f"  Suchlauf            alle {config.discovery_interval}s")
+    print(f"  Anfragebudget       {config.requests_per_minute}/Min.")
+    print(f"  Kanaele             {', '.join(n.name for n in notifier.notifiers) or 'keine'}")
+    print(f"  Beobachtungsliste   {args.watchlist}")
+    print()
+    print("Hinweis: Frisch gestartete Token werden bewusst NICHT sofort gemeldet.")
+    print("Unter 10 Minuten Alter sind die Kennzahlen Rauschen. Sie stehen auf")
+    print("der Liste und werden gemeldet, sobald sie bewertbar sind - falls sie")
+    print("die Filter dann noch bestehen. Die meisten tun das nie.")
+    print()
+    print("Abbruch mit Strg+C.")
+    print()
+
+    with Watchlist(args.watchlist) as watchlist:
+        monitor = Monitor(settings, dex, watchlist, notifier, config)
+        return monitor.run(max_ticks=1 if args.once else None)
+
+
 def cmd_paper(args: argparse.Namespace, settings: Settings) -> int:
     with Journal(settings.journal_path) as journal:
         if args.paper_command == "open":
@@ -486,6 +530,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     paper_sub.add_parser("stats", help="Auswertung anzeigen")
     paper.set_defaults(func=cmd_paper)
+
+    monitor = sub.add_parser("monitor", help="Dauerbetrieb: neue Token beobachten und melden")
+    monitor.add_argument("--min-score", type=int, default=55,
+                         help="Meldeschwelle (Standard: 55)")
+    monitor.add_argument("--discovery-interval", type=int, default=300,
+                         help="Sekunden zwischen Suchlaeufen nach neuen Token")
+    monitor.add_argument("--rpm", type=int, default=50,
+                         help="Anfragebudget pro Minute (API-Limit liegt bei ca. 60)")
+    monitor.add_argument("--max-watchlist", type=int, default=400)
+    monitor.add_argument("--tick", type=int, default=15, help="Sekunden pro Durchlauf")
+    monitor.add_argument("--watchlist", default="radar-watchlist.sqlite3")
+    monitor.add_argument("--log-file", help="Alarme zusaetzlich als JSON-Zeilen speichern")
+    monitor.add_argument("--telegram", action="store_true",
+                         help="Alarme an den eigenen Telegram-Bot senden "
+                              "(TELEGRAM_BOT_TOKEN und TELEGRAM_CHAT_ID setzen)")
+    monitor.add_argument("--no-console", action="store_true")
+    monitor.add_argument("--once", action="store_true",
+                         help="Nur einen Durchlauf (fuer cron oder Aufgabenplanung)")
+    monitor.set_defaults(func=cmd_monitor)
 
     demo = sub.add_parser("demo", help="Beispielausgabe ohne Netzwerkzugriff")
     demo.set_defaults(func=cmd_demo)

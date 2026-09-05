@@ -73,6 +73,37 @@ class HttpClient:
         raise SourceError(f"{url} nicht erreichbar: {last_error}")
 
 
+    def post_form(self, url: str, data: dict[str, str], retries: int = 2) -> Any:
+        """POST mit formularkodiertem Koerper - fuer Benachrichtigungs-APIs.
+
+        Geheimnisse stehen in der URL oder im Koerper; Fehlermeldungen geben
+        deshalb nie den vollstaendigen Request wieder.
+        """
+        body = urllib.parse.urlencode(data).encode("utf-8")
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        last_error: Exception | None = None
+
+        for attempt in range(retries):
+            self.limiter.wait()
+            request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    raw = response.read().decode("utf-8", errors="replace")
+                return json.loads(raw) if raw.strip() else None
+            except urllib.error.HTTPError as exc:
+                if 400 <= exc.code < 500 and exc.code != 429:
+                    raise SourceError(f"Benachrichtigung abgelehnt: HTTP {exc.code}") from None
+                last_error = exc
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = exc
+            time.sleep(2 ** attempt)
+
+        raise SourceError(f"Benachrichtigung fehlgeschlagen: {type(last_error).__name__}")
+
+
 def _as_pair_list(payload: Any) -> list[dict]:
     """DexScreener liefert je nach Endpoint {'pairs': [...]}, [...] oder null."""
     if payload is None:
