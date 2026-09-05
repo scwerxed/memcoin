@@ -11,6 +11,7 @@ from .journal import Journal, format_timestamp
 from .model import TokenSnapshot
 from .monitor import Monitor, MonitorConfig, Watchlist
 from .notify import build_notifiers
+from .onchain import PUBLIC_RPC, SolanaRpc, merge_reports
 from .report import render_plan, render_verdict
 from .risk import expectancy, plan_position, required_win_rate, risk_of_ruin
 from .scoring import Stage, evaluate
@@ -20,6 +21,24 @@ DISCLAIMER = (
     "Hinweis: Analysewerkzeug, keine Anlageberatung. Alle Daten stammen aus\n"
     "oeffentlichen APIs und koennen unvollstaendig oder veraltet sein."
 )
+
+
+def _rpc(settings: Settings) -> SolanaRpc:
+    """RPC-Knoten. Eigener Knoten wenn konfiguriert, sonst der oeffentliche."""
+    url = settings.solana_rpc_url or PUBLIC_RPC
+    # Eigener Knoten vertraegt deutlich mehr als der oeffentliche Endpunkt.
+    interval = 0.2 if settings.solana_rpc_url else 2.0
+    return SolanaRpc(url, HttpClient(settings.request_timeout, interval))
+
+
+def _contract_report(settings: Settings, rug: RugCheck, mint: str) -> dict | None:
+    """Vertragspruefung aus beiden Quellen, jede fuer ihren zuverlaessigen Teil."""
+    rpc_bericht = None
+    try:
+        rpc_bericht = _rpc(settings).token_report(mint)
+    except SourceError:
+        rpc_bericht = None
+    return merge_reports(rpc_bericht, rug.report(mint))
 
 
 def _clients(settings: Settings) -> tuple[DexScreener, RugCheck]:
@@ -58,7 +77,7 @@ def cmd_check(args: argparse.Namespace, settings: Settings) -> int:
         print("oder es gibt (noch) keinen Pool - dann kannst du auch nicht verkaufen.")
         return 1
 
-    report = None if args.no_contract else rug.report(snap.mint)
+    report = None if args.no_contract else _contract_report(settings, rug, snap.mint)
     verdict = evaluate(snap, settings.thresholds, report)
     print(render_verdict(verdict))
 

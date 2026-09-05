@@ -217,6 +217,11 @@ def _apply_contract_report(verdict: Verdict, report: dict | None) -> None:
 
     verdict.contract_checked = True
     token = report.get("token") or {}
+    if report.get("_quelle") == "rpc":
+        verdict.contract_notes.append(
+            "Quelle: eigener RPC-Knoten (Authorities direkt aus dem Mint-Konto). "
+            "Die Sperrung der Liquiditaet laesst sich so allein nicht pruefen"
+        )
 
     if token.get("mintAuthority"):
         verdict.hard_fails.append(
@@ -256,6 +261,28 @@ def _apply_contract_report(verdict: Verdict, report: dict | None) -> None:
         else:
             verdict.contract_notes.append(f"Groesster Halter {top_pct:.0f}% - gut verteilt")
 
+    # Halterliste direkt vom Knoten: enthaelt zwangslaeufig die Pool-Konten,
+    # weil ein reiner RPC-Abruf Pool und Wallet nicht unterscheiden kann.
+    # Deshalb nur Warnung - ein Ausschluss waere hier oft schlicht falsch.
+    if top_pct is None and report.get("topHoldersRpc"):
+        eintraege = [e for e in report["topHoldersRpc"] if isinstance(e, dict)]
+        if eintraege:
+            groesster = max(_to_pct(e.get("pct")) for e in eintraege)
+            ohne_groessten = sorted(
+                (_to_pct(e.get("pct")) for e in eintraege), reverse=True
+            )[1:2]
+            zweiter = ohne_groessten[0] if ohne_groessten else 0.0
+            verdict.contract_notes.append(
+                f"Groesstes Token-Konto {groesster:.0f}% (enthaelt den "
+                f"Liquiditaetspool), zweitgroesstes {zweiter:.0f}%"
+            )
+            if zweiter > 15:
+                verdict.warnings.append(
+                    f"Zweitgroesster Halter haelt {zweiter:.0f}% - Klumpenrisiko. "
+                    "Ob das eine Wallet oder ein weiterer Pool ist, kann ein "
+                    "reiner Knotenabruf nicht aufloesen"
+                )
+
     for risk in report.get("risks") or []:
         if not isinstance(risk, dict):
             continue
@@ -267,6 +294,13 @@ def _apply_contract_report(verdict: Verdict, report: dict | None) -> None:
             verdict.hard_fails.append(f"RugCheck: {text}")
         elif level in ("warn", "warning", "medium"):
             verdict.warnings.append(f"RugCheck: {text}")
+
+
+def _to_pct(value: object) -> float:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _extract_lp_locked(report: dict) -> float | None:

@@ -47,6 +47,46 @@ python3 run.py demo        # Beispielausgabe, ohne Netzwerkzugriff
 Unter Windows heisst der Befehl in der Regel `python` statt `python3`.
 Benoetigt wird Python 3.11 oder neuer.
 
+### Vertragspruefung: eigener RPC-Knoten (empfohlen)
+
+Mint- und Freeze-Authority stehen unveraenderlich im Mint-Konto der
+Blockchain. Mit einem eigenen RPC-Knoten liest das Werkzeug sie **direkt aus
+der Quelle** - kein Dritter dazwischen, kein Abfragelimit:
+
+```bash
+export SOLANA_RPC_URL="https://eu.fluxrpc.com?key=DEIN-SCHLUESSEL"
+```
+
+Kostenlose Knoten gibt es u. a. bei [FluxRPC](https://fluxrpc.com) (10 GB
+gratis), Helius oder QuickNode. Ohne diese Variable wird der oeffentliche
+Endpunkt `api.mainnet-beta.solana.com` benutzt - stark limitiert, fuer
+gelegentliche `check`-Aufrufe aber ausreichend.
+
+**Der Schluessel steht in der URL.** Deshalb gehoert er in die Umgebung und
+niemals in eine eingecheckte Datei - und deshalb schneidet dieses Werkzeug
+den Abfrageteil der URL aus jeder Fehlermeldung heraus, damit er nicht in
+Logs landet.
+
+#### Wer prueft was
+
+| Pruefung | Quelle | Warum |
+|---|---|---|
+| Mint-Authority | RPC-Knoten | Steht im Mint-Konto - unbestreitbar |
+| Freeze-Authority | RPC-Knoten | dito |
+| Angebot, Nachkommastellen | RPC-Knoten | dito |
+| **LP-Sperre** | RugCheck | Ein reiner Knotenabruf kann das nicht aufloesen |
+| **Halter vs. Pool** | RugCheck | Der Knoten sieht nur Token-Konten, nicht wessen |
+
+Beide Quellen werden zusammengefuehrt, jede fuer den Teil, in dem sie
+zuverlaessig ist. Ohne RugCheck laeuft die Pruefung weiter, meldet aber
+ehrlich, dass die Sperrung der Liquiditaet ungeprueft blieb.
+
+Zur Halterliste vom Knoten eine Warnung, die viele Werkzeuge falsch machen:
+**das groesste Token-Konto ist fast immer der Liquiditaetspool selbst.** Das
+ist kein Klumpenrisiko, sondern die Handelbarkeit. Wer das als "ein Wallet
+haelt 78%" wertet, verwirft jeden gesunden Token. Dieses Werkzeug weist die
+Zahl deshalb nur aus und warnt erst ab dem *zweitgroessten* Konto.
+
 ### Der RugCheck-Schluessel ist optional
 
 Die Vertragspruefung (Mint-/Freeze-Authority, LP-Sperre, Halterverteilung)
@@ -391,9 +431,10 @@ radar/
   journal.py   SQLite-Handelsjournal mit Auswertung
   monitor.py   Dauerbetrieb: Beobachtungsliste, Reifeplanung, Anfragebudget
   notify.py    Benachrichtigungskanaele (Konsole, Datei, Telegram)
+  onchain.py   Direkte Blockchain-Abfrage ueber einen Solana-RPC-Knoten
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         68 Tests: python3 -m unittest discover -s tests
+tests/         86 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

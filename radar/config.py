@@ -83,6 +83,12 @@ class Settings:
     rugcheck_api_key: str | None = field(
         default_factory=lambda: os.environ.get("RUGCHECK_API_KEY") or None
     )
+    solana_rpc_url: str | None = field(
+        default_factory=lambda: os.environ.get("SOLANA_RPC_URL") or None
+    )
+    """Eigener RPC-Knoten, z. B. von FluxRPC oder Helius. Der Schluessel steht
+    ueblicherweise in der URL - deshalb gehoert er in die Umgebung und niemals
+    in eine eingecheckte Konfigurationsdatei."""
     journal_path: str = field(
         default_factory=lambda: os.environ.get("RADAR_JOURNAL", "radar-journal.sqlite3")
     )

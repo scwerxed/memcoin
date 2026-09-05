@@ -104,6 +104,36 @@ class HttpClient:
         raise SourceError(f"Benachrichtigung fehlgeschlagen: {type(last_error).__name__}")
 
 
+    def post_json(self, url: str, payload: dict, retries: int = 3) -> Any:
+        """POST mit JSON-Koerper - fuer JSON-RPC-Knoten.
+
+        Der Schluessel steht bei den meisten Anbietern in der URL. Fehler
+        geben deshalb nie die vollstaendige URL wieder.
+        """
+        body = json.dumps(payload).encode("utf-8")
+        headers = {"User-Agent": USER_AGENT, "Content-Type": "application/json"}
+        last_error: Exception | None = None
+
+        for attempt in range(retries):
+            self.limiter.wait()
+            request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    raw = response.read().decode("utf-8", errors="replace")
+                return json.loads(raw) if raw.strip() else None
+            except urllib.error.HTTPError as exc:
+                if exc.code in (401, 403):
+                    raise SourceError("Knoten lehnt den Zugang ab - Schluessel pruefen") from None
+                if 400 <= exc.code < 500 and exc.code != 429:
+                    raise SourceError(f"Knoten antwortet mit HTTP {exc.code}") from None
+                last_error = exc
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+                last_error = exc
+            time.sleep(2 ** attempt)
+
+        raise SourceError(f"Knoten nicht erreichbar: {type(last_error).__name__}")
+
+
 def _as_pair_list(payload: Any) -> list[dict]:
     """DexScreener liefert je nach Endpoint {'pairs': [...]}, [...] oder null."""
     if payload is None:
