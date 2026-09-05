@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+*.sqlite3
+radar-journal.sqlite3
+.venv/
