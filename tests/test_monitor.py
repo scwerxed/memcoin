@@ -23,6 +23,7 @@ from radar.monitor import (
 )
 from radar.notify import Alert, Notifier
 from radar.scoring import evaluate
+from radar.cli import _clients
 from radar.sources import SourceError
 from tests.test_radar import make_pair
 
@@ -309,6 +310,78 @@ class TestMonitorLoop(unittest.TestCase):
         monitor = self._monitor(dex, requests_per_minute=5, min_score=101)
         monitor.run(max_ticks=1)
         self.assertLessEqual(dex.calls["pairs"], 3)
+
+
+class TestDiscoveryScheduling(unittest.TestCase):
+    """Regression: der erste Suchlauf darf nicht vom Uhrenstand abhaengen.
+
+    time.monotonic() hat keinen definierten Nullpunkt. In einem frisch
+    gestarteten Container zaehlt es ab Null - ein 0.0-Sentinel haette den
+    ersten Suchlauf dort bis zum Ablauf des Intervalls unterdrueckt.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".sqlite3", delete=False)
+        self.tmp.close()
+        self.wl = Watchlist(self.tmp.name)
+
+    def tearDown(self):
+        self.wl.close()
+        os.unlink(self.tmp.name)
+
+    def _monitor(self, dex, interval):
+        return Monitor(Settings(), dex, self.wl, SammelNotifier(),
+                       MonitorConfig(quiet=True, tick_seconds=0,
+                                     discovery_interval=interval))
+
+    def test_first_discovery_runs_immediately(self):
+        """Auch bei sehr grossem Intervall muss der erste Lauf sofort kommen."""
+        dex = FakeDex(profiles=[{"chainId": "solana", "tokenAddress": "GUT"}],
+                      pairs_by_mint={"GUT": make_pair()})
+        monitor = self._monitor(dex, interval=86_400)
+        self.assertTrue(monitor.discovery_due())
+        monitor.tick()
+        self.assertEqual(dex.calls["profiles"], 1)
+        self.assertEqual(self.wl.stats()["gesamt"], 1)
+
+    def test_second_tick_does_not_rediscover(self):
+        dex = FakeDex(profiles=[{"chainId": "solana", "tokenAddress": "GUT"}],
+                      pairs_by_mint={"GUT": make_pair()})
+        monitor = self._monitor(dex, interval=86_400)
+        monitor.tick()
+        self.assertFalse(monitor.discovery_due())
+        monitor.tick()
+        self.assertEqual(dex.calls["profiles"], 1)
+
+    def test_no_zero_sentinel(self):
+        """Der Startwert darf keine Zahl sein, die mit der Uhr vergleichbar ist."""
+        monitor = self._monitor(FakeDex(), interval=300)
+        self.assertIsNone(monitor._last_discovery)
+
+
+class TestRateLimiting(unittest.TestCase):
+    """RugCheck limitiert strenger als DexScreener: ohne Schluessel 10/Min."""
+
+    def test_rugcheck_is_throttled_harder_without_key(self):
+        settings = Settings()
+        settings.rugcheck_api_key = None
+        dex, rug = _clients(settings)
+        self.assertGreaterEqual(rug.client.limiter.min_interval, 6.0,
+                                "ohne Schluessel sind nur 10 Berichte/Minute erlaubt")
+        self.assertGreater(rug.client.limiter.min_interval,
+                           dex.client.limiter.min_interval)
+
+    def test_rugcheck_speeds_up_with_key(self):
+        settings = Settings()
+        settings.rugcheck_api_key = "test-key"
+        _, rug = _clients(settings)
+        self.assertLessEqual(rug.client.limiter.min_interval, 1.5)
+        self.assertEqual(rug.api_key, "test-key")
+
+    def test_clients_do_not_share_a_limiter(self):
+        """Ein gemeinsamer Abstandshalter wuerde eines der Limits reissen."""
+        dex, rug = _clients(Settings())
+        self.assertIsNot(dex.client, rug.client)
 
 
 if __name__ == "__main__":

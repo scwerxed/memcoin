@@ -23,8 +23,17 @@ DISCLAIMER = (
 
 
 def _clients(settings: Settings) -> tuple[DexScreener, RugCheck]:
-    http = HttpClient(settings.request_timeout, settings.min_request_interval)
-    return DexScreener(http), RugCheck(http, settings.rugcheck_api_key)
+    """Getrennte Abstandshalter, weil die Dienste unterschiedlich streng sind.
+
+    DexScreener erlaubt ca. 60 Anfragen/Minute. RugCheck ist deutlich
+    strenger: ohne Schluessel 10 Berichte/Minute, mit Schluessel 60. Ein
+    gemeinsamer Abstandshalter wuerde eines der beiden Limits reissen -
+    ohne Schluessel um das Fuenffache.
+    """
+    dex_http = HttpClient(settings.request_timeout, settings.min_request_interval)
+    rug_interval = 1.1 if settings.rugcheck_api_key else 6.5
+    rug_http = HttpClient(settings.request_timeout, rug_interval)
+    return DexScreener(dex_http), RugCheck(rug_http, settings.rugcheck_api_key)
 
 
 def _snapshot_for(dex: DexScreener, mint: str, chain: str) -> TokenSnapshot | None:

@@ -47,16 +47,35 @@ python3 run.py demo        # Beispielausgabe, ohne Netzwerkzugriff
 Unter Windows heisst der Befehl in der Regel `python` statt `python3`.
 Benoetigt wird Python 3.11 oder neuer.
 
-Optional, fuer die vollstaendige Vertragspruefung (Mint-/Freeze-Authority,
-LP-Lock, Halterverteilung) einen kostenlosen RugCheck-Schluessel setzen:
+### Der RugCheck-Schluessel ist optional
+
+Die Vertragspruefung (Mint-/Freeze-Authority, LP-Sperre, Halterverteilung)
+laeuft **ohne Schluessel**. Der Schluessel hebt nur das Abfragelimit:
+
+| | Berichte pro Minute |
+|---|---|
+| ohne Schluessel | 10 |
+| mit Schluessel | 60 |
+
+Fuer `check` - einen Token nach dem anderen - reichen 10/Minute problemlos.
+Das Werkzeug drosselt sich automatisch auf das jeweils geltende Limit.
+
+Wer haeufiger abfragt, legt sich auf [rugcheck.xyz](https://rugcheck.xyz) ein
+Konto an (Anmeldung ueber Wallet-Verbindung) und erzeugt im Dashboard unter
+"API" einen Schluessel:
 
 ```bash
 export RUGCHECK_API_KEY="dein-key"
 ```
 
-Ohne diesen Schluessel laeuft alles weiter, aber die Bewertung wird bei 65/100
-gedeckelt - ohne Vertragspruefung fehlen genau die Angaben, an denen ein Rug
-erkennbar waere.
+**Das ist ein Entwickler-Zugang, keine Wallet-Adresse und kein Schluessel-
+material.** Er bewegt kein Guthaben. Dieses Werkzeug fragt zu keinem
+Zeitpunkt nach einem privaten Schluessel oder einer Seed-Phrase - es kann
+gar nicht handeln, nur lesen.
+
+Bleibt die Vertragspruefung ganz aus (Dienst nicht erreichbar), laeuft die
+Analyse weiter, deckelt die Bewertung aber bei 65/100 - ohne diese Angaben
+fehlt genau das, woran ein Rug erkennbar waere.
 
 ## Befehle
 
@@ -374,7 +393,7 @@ radar/
   notify.py    Benachrichtigungskanaele (Konsole, Datei, Telegram)
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         62 Tests: python3 -m unittest discover -s tests
+tests/         68 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

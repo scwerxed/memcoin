@@ -249,13 +249,23 @@ class Monitor:
         self.config = config or MonitorConfig()
         self.budget = RateBudget(self.config.requests_per_minute)
         self._stop = False
-        self._last_discovery = 0.0
+        # None = noch nie gesucht. Kein 0.0-Sentinel: time.monotonic()
+        # hat keinen definierten Nullpunkt - in einem frisch gestarteten
+        # Container zaehlt es ab Null, und der erste Suchlauf bliebe dann
+        # bis zum Ablauf des Intervalls aus.
+        self._last_discovery: float | None = None
         self.counters = {"entdeckt": 0, "geprueft": 0, "gemeldet": 0, "verworfen": 0}
 
     def request_stop(self, *_: object) -> None:
         self._stop = True
 
     # ----------------------------------------------------------------- #
+    def discovery_due(self) -> bool:
+        """Beim allerersten Durchlauf immer, danach nach Intervall."""
+        if self._last_discovery is None:
+            return True
+        return time.monotonic() - self._last_discovery >= self.config.discovery_interval
+
     def discover(self) -> int:
         """Neue Token aus den Listing-Endpunkten aufnehmen."""
         if not self.budget.take(2):
@@ -349,7 +359,7 @@ class Monitor:
     # ----------------------------------------------------------------- #
     def tick(self) -> None:
         """Ein Durchlauf: ggf. suchen, dann faellige Token im Budget pruefen."""
-        if time.monotonic() - self._last_discovery >= self.config.discovery_interval:
+        if self.discovery_due():
             stats = self.watchlist.stats()
             if stats["aktiv"] < self.config.max_watchlist:
                 neu = self.discover()

@@ -173,9 +173,10 @@ class DexScreener:
 class RugCheck:
     """Vertrags- und Holder-Risiken (Mint-/Freeze-Authority, LP-Lock, Insider).
 
-    Der oeffentliche Zugang ist zeitweise limitiert. Ein Key in
-    RUGCHECK_API_KEY wird automatisch verwendet; ohne Antwort laeuft die
-    Analyse weiter, markiert das Ergebnis aber als unvollstaendig.
+    Der Zugang ist oeffentlich und funktioniert ohne Schluessel - dann
+    allerdings mit nur 10 Berichten pro Minute statt 60. Ein Schluessel in
+    RUGCHECK_API_KEY wird automatisch verwendet. Bleibt eine Antwort aus,
+    laeuft die Analyse weiter, markiert das Ergebnis aber als unvollstaendig.
     """
 
     BASE = "https://api.rugcheck.xyz/v1"
