@@ -6,6 +6,7 @@ import argparse
 import sys
 import time
 
+from . import env_file
 from .config import Settings
 from .journal import Journal, format_timestamp
 from .model import TokenSnapshot
@@ -361,6 +362,11 @@ def cmd_monitor(args: argparse.Namespace, settings: Settings) -> int:
         return monitor.run(max_ticks=1 if args.once else None)
 
 
+def cmd_setup(args: argparse.Namespace, settings: Settings) -> int:
+    from .wizard import run_setup
+    return run_setup(settings)
+
+
 def cmd_paper(args: argparse.Namespace, settings: Settings) -> int:
     with Journal(settings.journal_path) as journal:
         if args.paper_command == "open":
@@ -500,7 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--config", help="Pfad zu einer JSON-Konfiguration")
     parser.add_argument("--chain", default=None, help="Chain-ID (Standard: solana)")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
     check = sub.add_parser("check", help="Einzelnen Token pruefen (Mint-Adresse)")
     check.add_argument("mint")
@@ -579,6 +585,9 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Nur einen Durchlauf (fuer cron oder Aufgabenplanung)")
     monitor.set_defaults(func=cmd_monitor)
 
+    setup = sub.add_parser("setup", help="Gefuehrte Einrichtung der Zugaenge")
+    setup.set_defaults(func=cmd_setup)
+
     demo = sub.add_parser("demo", help="Beispielausgabe ohne Netzwerkzugriff")
     demo.set_defaults(func=cmd_demo)
 
@@ -591,8 +600,26 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Zugangsdaten aus .env in die Umgebung holen, bevor Settings sie liest.
+    env_file.load()
+
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Ohne Argumente: menuegefuehrt. Nur wenn wirklich ein Terminal da ist -
+    # in Skripten, cron oder Diensten waere eine Eingabeaufforderung fatal.
+    if not argv:
+        if sys.stdin.isatty():
+            from .menu import run_menu
+            return run_menu(lambda inner: main(inner))
+        build_parser().print_help()
+        return 0
+
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not getattr(args, "func", None):
+        parser.print_help()
+        return 0
     settings = Settings.load(args.config)
     if args.chain:
         settings.chain = args.chain

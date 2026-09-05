@@ -6,3 +6,4 @@ radar-journal.sqlite3
 *.jsonl
 radar-watchlist.sqlite3
 monitor.log
+.env

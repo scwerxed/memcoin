@@ -36,96 +36,80 @@ auf null geht, und zwingt dich zu einer Positionsgroesse, die du ueberlebst.
 
 ---
 
-## Installation
+## So benutzt du es (der einfache Weg)
+
+**Es gibt nichts einzurichten und nichts auswendig zu lernen.**
+
+1. Ordner herunterladen: auf [github.com/scwerxed/memcoin](https://github.com/scwerxed/memcoin)
+   auf den grünen Knopf **Code** → **Download ZIP**, dann entpacken.
+2. **Windows:** `start.bat` doppelklicken.
+   **macOS/Linux:** Terminal im Ordner öffnen, `./start.sh` eingeben.
+3. Es erscheint ein Menü. Zahl tippen, Enter.
+
+```
+   1   Token prüfen        - jemand hat dir eine Adresse geschickt
+   2   Markt durchsuchen   - was besteht gerade die Filter
+   3   Monitor starten     - läuft dauerhaft, meldet Fundstücke
+   4   Positionsgröße      - wie viel darf ich setzen
+   5   Meine Trades        - Journal und Auswertung
+   6   Beispiel ansehen    - Ausgabe ohne Internet
+   7   Einrichtung         - Zugänge eintragen und testen
+   0   Beenden
+```
+
+Fang mit **6** an - das zeigt dir an drei Beispielen, was das Werkzeug
+ausgibt, ohne dass irgendetwas eingerichtet sein muss.
+
+Wenn Python fehlt, sagt dir `start.bat` das und wo du es herbekommst. Bei
+der Windows-Installation muss **"Add Python to PATH"** angekreuzt sein.
+
+### Zugänge eintragen (optional, Menüpunkt 7)
+
+Punkt **7** fragt die Zugänge nacheinander ab, **prüft jeden sofort** und
+speichert sie in einer Datei `.env` im selben Ordner. Danach nie wieder.
+
+Alles daran ist freiwillig - jede Frage lässt sich mit Enter überspringen.
+Ohne Zugänge läuft das Werkzeug auch, nur langsamer und mit weniger
+Prüfungen.
+
+**Es wird nie nach einer Seed-Phrase oder einem privaten Schlüssel
+gefragt.** Alle Zugänge sind reine Lesezugänge und können kein Geld
+bewegen. Wer danach fragt, will dich bestehlen - ausnahmslos.
+
+Die Datei `.env` enthält Geheimnisse. Sie steht in `.gitignore`, landet also
+nicht auf GitHub. Trotzdem: nicht weitergeben, keine Screenshots davon.
+
+---
+
+## Der Weg für Fortgeschrittene
+
+Wer lieber tippt, kann jeden Menüpunkt auch direkt aufrufen - das Menü
+zeigt bei jedem Schritt an, welchem Befehl die Auswahl entspricht.
 
 ```bash
 git clone https://github.com/scwerxed/memcoin.git
 cd memcoin
-python3 run.py demo        # Beispielausgabe, ohne Netzwerkzugriff
+python3 run.py demo
 ```
 
-Unter Windows heisst der Befehl in der Regel `python` statt `python3`.
-Benoetigt wird Python 3.11 oder neuer.
+Unter Windows in PowerShell heisst der Befehl `python` statt `python3`
+(oder `py`, falls sich der Microsoft Store meldet). Benoetigt wird Python
+3.11 oder neuer.
 
-### Vertragspruefung: eigener RPC-Knoten (empfohlen)
+### Zugänge ohne den Assistenten
 
-Mint- und Freeze-Authority stehen unveraenderlich im Mint-Konto der
-Blockchain. Mit einem eigenen RPC-Knoten liest das Werkzeug sie **direkt aus
-der Quelle** - kein Dritter dazwischen, kein Abfragelimit:
+Statt Menüpunkt 7 gehen auch Umgebungsvariablen - oder eine von Hand
+angelegte `.env` im Projektordner:
 
-```bash
-export SOLANA_RPC_URL="https://eu.fluxrpc.com?key=DEIN-SCHLUESSEL"
+```
+SOLANA_RPC_URL=https://eu.fluxrpc.com?key=DEIN-SCHLUESSEL
+RUGCHECK_API_KEY=dein-schluessel
+RUGCHECK_BASE_URL=https://api.rugcheck.xyz
+TELEGRAM_BOT_TOKEN=123456:ABC...
+TELEGRAM_CHAT_ID=deine-chat-id
 ```
 
-Kostenlose Knoten gibt es u. a. bei [FluxRPC](https://fluxrpc.com) (10 GB
-gratis), Helius oder QuickNode. Ohne diese Variable wird der oeffentliche
-Endpunkt `api.mainnet-beta.solana.com` benutzt - stark limitiert, fuer
-gelegentliche `check`-Aufrufe aber ausreichend.
-
-**Der Schluessel steht in der URL.** Deshalb gehoert er in die Umgebung und
-niemals in eine eingecheckte Datei - und deshalb schneidet dieses Werkzeug
-den Abfrageteil der URL aus jeder Fehlermeldung heraus, damit er nicht in
-Logs landet.
-
-#### Wer prueft was
-
-| Pruefung | Quelle | Warum |
-|---|---|---|
-| Mint-Authority | RPC-Knoten | Steht im Mint-Konto - unbestreitbar |
-| Freeze-Authority | RPC-Knoten | dito |
-| Angebot, Nachkommastellen | RPC-Knoten | dito |
-| **LP-Sperre** | RugCheck | Ein reiner Knotenabruf kann das nicht aufloesen |
-| **Halter vs. Pool** | RugCheck | Der Knoten sieht nur Token-Konten, nicht wessen |
-
-Beide Quellen werden zusammengefuehrt, jede fuer den Teil, in dem sie
-zuverlaessig ist. Ohne RugCheck laeuft die Pruefung weiter, meldet aber
-ehrlich, dass die Sperrung der Liquiditaet ungeprueft blieb.
-
-Zur Halterliste vom Knoten eine Warnung, die viele Werkzeuge falsch machen:
-**das groesste Token-Konto ist fast immer der Liquiditaetspool selbst.** Das
-ist kein Klumpenrisiko, sondern die Handelbarkeit. Wer das als "ein Wallet
-haelt 78%" wertet, verwirft jeden gesunden Token. Dieses Werkzeug weist die
-Zahl deshalb nur aus und warnt erst ab dem *zweitgroessten* Konto.
-
-### Der RugCheck-Schluessel ist optional
-
-Die Vertragspruefung (Mint-/Freeze-Authority, LP-Sperre, Halterverteilung)
-laeuft **ohne Schluessel**. Der Schluessel hebt nur das Abfragelimit:
-
-| | Berichte pro Minute |
-|---|---|
-| ohne Schluessel | 10 |
-| mit Schluessel | 60 |
-
-Fuer `check` - einen Token nach dem anderen - reichen 10/Minute problemlos.
-Das Werkzeug drosselt sich automatisch auf das jeweils geltende Limit.
-
-Wer haeufiger abfragt, legt sich auf [rugcheck.xyz](https://rugcheck.xyz) ein
-Konto an (Anmeldung ueber Wallet-Verbindung) und erzeugt im Dashboard unter
-"API" einen Schluessel:
-
-```bash
-export RUGCHECK_API_KEY="dein-key"
-```
-
-Weist dein Anbieter im Dashboard einen eigenen Endpunkt aus (Feld "API
-ENDPOINT"), setze ihn zusaetzlich - mit oder ohne `/v1`, beides wird
-entgegengenommen:
-
-```bash
-export RUGCHECK_BASE_URL="https://api.rugcheck.xyz"
-```
-
-Ohne diese Variable wird `https://api.rugcheck.xyz/v1` verwendet.
-
-**Das ist ein Entwickler-Zugang, keine Wallet-Adresse und kein Schluessel-
-material.** Er bewegt kein Guthaben. Dieses Werkzeug fragt zu keinem
-Zeitpunkt nach einem privaten Schluessel oder einer Seed-Phrase - es kann
-gar nicht handeln, nur lesen.
-
-Bleibt die Vertragspruefung ganz aus (Dienst nicht erreichbar), laeuft die
-Analyse weiter, deckelt die Bewertung aber bei 65/100 - ohne diese Angaben
-fehlt genau das, woran ein Rug erkennbar waere.
+Bereits gesetzte Umgebungsvariablen haben Vorrang vor der Datei.
 
 ## Befehle
 
@@ -139,6 +123,8 @@ fehlt genau das, woran ein Rug erkennbar waere.
 | `monitor` | **Dauerbetrieb:** neue Token erfassen, reifen lassen, bei Eignung melden |
 | `watch <mint>` | Einzelnen Token beobachten, Phasenwechsel melden |
 | `demo` | Beispielausgabe ohne Netzwerk |
+| `setup` | Gefuehrte Einrichtung der Zugaenge |
+| *(ohne Argument)* | Menuegefuehrte Bedienung |
 
 ### Der wichtigste Befehl
 
@@ -442,9 +428,12 @@ radar/
   monitor.py   Dauerbetrieb: Beobachtungsliste, Reifeplanung, Anfragebudget
   notify.py    Benachrichtigungskanaele (Konsole, Datei, Telegram)
   onchain.py   Direkte Blockchain-Abfrage ueber einen Solana-RPC-Knoten
+  menu.py      Menuegefuehrte Bedienung
+  wizard.py    Gefuehrte Einrichtung mit Verbindungstest
+  env_file.py  Laedt und speichert Zugangsdaten in .env
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         93 Tests: python3 -m unittest discover -s tests
+tests/         114 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:
