@@ -52,7 +52,8 @@ def _clients(settings: Settings) -> tuple[DexScreener, RugCheck]:
     dex_http = HttpClient(settings.request_timeout, settings.min_request_interval)
     rug_interval = 1.1 if settings.rugcheck_api_key else 6.5
     rug_http = HttpClient(settings.request_timeout, rug_interval)
-    return DexScreener(dex_http), RugCheck(rug_http, settings.rugcheck_api_key)
+    return DexScreener(dex_http), RugCheck(rug_http, settings.rugcheck_api_key,
+                                          settings.rugcheck_base_url)
 
 
 def _snapshot_for(dex: DexScreener, mint: str, chain: str) -> TokenSnapshot | None:

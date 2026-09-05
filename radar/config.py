@@ -83,6 +83,13 @@ class Settings:
     rugcheck_api_key: str | None = field(
         default_factory=lambda: os.environ.get("RUGCHECK_API_KEY") or None
     )
+    rugcheck_base_url: str | None = field(
+        default_factory=lambda: os.environ.get("RUGCHECK_BASE_URL") or None
+    )
+    """Abweichende Adresse der RugCheck-Schnittstelle. Noetig, wenn ein
+    Anbieter wie FluxRPC im Dashboard einen eigenen Endpunkt ausweist.
+    Ohne Angabe wird api.rugcheck.xyz verwendet."""
+
     solana_rpc_url: str | None = field(
         default_factory=lambda: os.environ.get("SOLANA_RPC_URL") or None
     )

@@ -108,6 +108,16 @@ Konto an (Anmeldung ueber Wallet-Verbindung) und erzeugt im Dashboard unter
 export RUGCHECK_API_KEY="dein-key"
 ```
 
+Weist dein Anbieter im Dashboard einen eigenen Endpunkt aus (Feld "API
+ENDPOINT"), setze ihn zusaetzlich - mit oder ohne `/v1`, beides wird
+entgegengenommen:
+
+```bash
+export RUGCHECK_BASE_URL="https://api.rugcheck.xyz"
+```
+
+Ohne diese Variable wird `https://api.rugcheck.xyz/v1` verwendet.
+
 **Das ist ein Entwickler-Zugang, keine Wallet-Adresse und kein Schluessel-
 material.** Er bewegt kein Guthaben. Dieses Werkzeug fragt zu keinem
 Zeitpunkt nach einem privaten Schluessel oder einer Seed-Phrase - es kann
@@ -434,7 +444,7 @@ radar/
   onchain.py   Direkte Blockchain-Abfrage ueber einen Solana-RPC-Knoten
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         86 Tests: python3 -m unittest discover -s tests
+tests/         93 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

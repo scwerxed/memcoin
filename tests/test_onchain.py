@@ -12,7 +12,7 @@ from radar.config import Thresholds
 from radar.model import TokenSnapshot
 from radar.onchain import PUBLIC_RPC, SolanaRpc, _redact, merge_reports
 from radar.scoring import evaluate
-from radar.sources import SourceError
+from radar.sources import RugCheck, SourceError
 from tests.test_radar import make_pair
 
 MINT = "So11111111111111111111111111111111111111112"
@@ -205,6 +205,60 @@ class TestScoringWithRpcReport(unittest.TestCase):
         self.assertTrue(verdict.contract_checked)
         self.assertTrue(any("RPC-Knoten" in n for n in verdict.contract_notes))
         self.assertTrue(any("Liquiditaet" in n for n in verdict.contract_notes))
+
+
+class TestRugCheckEndpoint(unittest.TestCase):
+    """Der Endpunkt muss mit und ohne /v1 entgegengenommen werden koennen."""
+
+    def test_default_endpoint(self):
+        rug = RugCheck(client=None)
+        self.assertEqual(rug.base, "https://api.rugcheck.xyz/v1")
+
+    def test_url_without_version_gets_v1(self):
+        rug = RugCheck(client=None, base_url="https://api.rugcheck.xyz")
+        self.assertEqual(rug.base, "https://api.rugcheck.xyz/v1")
+
+    def test_url_with_version_is_kept(self):
+        rug = RugCheck(client=None, base_url="https://api.rugcheck.xyz/v1")
+        self.assertEqual(rug.base, "https://api.rugcheck.xyz/v1")
+
+    def test_trailing_slash_and_whitespace_are_tolerated(self):
+        """Aus der Zwischenablage kommen Adressen oft mit Schraegstrich oder Leerzeichen."""
+        rug = RugCheck(client=None, base_url="  https://eigener.anbieter.test/v1/  ")
+        self.assertEqual(rug.base, "https://eigener.anbieter.test/v1")
+
+    def test_custom_provider_endpoint(self):
+        rug = RugCheck(client=None, base_url="https://rugcheck.fluxrpc.com")
+        self.assertEqual(rug.base, "https://rugcheck.fluxrpc.com/v1")
+
+    def test_request_uses_configured_base_and_header(self):
+        class SpionClient:
+            def __init__(self):
+                self.urls, self.headers = [], []
+
+            def get_json(self, url, headers=None, retries=3):
+                self.urls.append(url)
+                self.headers.append(headers or {})
+                return {"token": {}}
+
+        spion = SpionClient()
+        rug = RugCheck(spion, api_key="test-key", base_url="https://eigener.test")
+        rug.report("MINT123")
+        self.assertEqual(spion.urls[0], "https://eigener.test/v1/tokens/MINT123/report")
+        self.assertEqual(spion.headers[0]["X-API-KEY"], "test-key")
+
+    def test_no_header_without_key(self):
+        class SpionClient:
+            def __init__(self):
+                self.headers = []
+
+            def get_json(self, url, headers=None, retries=3):
+                self.headers.append(headers or {})
+                return {"token": {}}
+
+        spion = SpionClient()
+        RugCheck(spion).report("MINT123")
+        self.assertNotIn("X-API-KEY", spion.headers[0])
 
 
 if __name__ == "__main__":

@@ -211,15 +211,28 @@ class RugCheck:
 
     BASE = "https://api.rugcheck.xyz/v1"
 
-    def __init__(self, client: HttpClient, api_key: str | None = None) -> None:
+    def __init__(self, client: HttpClient, api_key: str | None = None,
+                 base_url: str | None = None) -> None:
         self.client = client
         self.api_key = api_key
+        self.base = self._normalise(base_url) if base_url else self.BASE
+
+    @staticmethod
+    def _normalise(url: str) -> str:
+        """Nimmt die Adresse mit oder ohne /v1 entgegen.
+
+        Anbieter weisen den Endpunkt mal als "https://api.rugcheck.xyz",
+        mal als ".../v1" aus. Beides muss funktionieren, ohne dass daraus
+        ein doppeltes oder fehlendes Segment wird.
+        """
+        url = url.strip().rstrip("/")
+        return url if url.endswith("/v1") else url + "/v1"
 
     def report(self, mint: str) -> dict | None:
         headers = {"X-API-KEY": self.api_key} if self.api_key else {}
         for path in (f"/tokens/{mint}/report", f"/tokens/{mint}/report/summary"):
             try:
-                payload = self.client.get_json(self.BASE + path, headers=headers, retries=2)
+                payload = self.client.get_json(self.base + path, headers=headers, retries=2)
             except SourceError:
                 continue
             if isinstance(payload, dict):
