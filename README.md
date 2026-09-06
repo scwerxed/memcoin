@@ -177,6 +177,98 @@ python3 run.py paper stats
 
 ---
 
+## Andere Ketten: Robinhood Chain, Base, Ethereum, Arbitrum
+
+`check` erkennt die Kette **automatisch** an der Adresse. Du musst nichts
+einstellen:
+
+```bash
+python3 run.py check 0x2b5867d98E4d2bB440a35980e7C87C47Ebc98b34
+```
+
+### Warum die Prüfung dort anders aussieht
+
+Mint- und Freeze-Authority sind Solana-Begriffe. Auf EVM-Ketten gibt es die
+nicht - dort steckt das Risiko im Vertragscode selbst. Geprüft wird deshalb
+der ausgelieferte Bytecode und der Vertragszustand.
+
+| Solana | EVM-Ketten |
+|---|---|
+| Mint-Authority aktiv | `mint(...)` im Code **und** Besitzer nicht abgegeben |
+| Freeze-Authority aktiv | `blacklist(...)`, `pause()`, `setTradingEnabled(...)` |
+| LP nicht gesperrt | (über RugCheck, nur Solana) |
+| — | **Aufrüstbarer Proxy** - der ganze Code kann ausgetauscht werden |
+| — | **`setSellTax(...)`** - aus 5% Verkaufsgebühr werden 99% |
+| — | `setMaxTxAmount(...)` - Verkauf faktisch unmöglich machen |
+
+Ein Beispiel dafür, wie das aussieht:
+
+```
+-- AUSSCHLUSSKRITERIEN -------------------------------------------------
+  X  mint(address,uint256): Der Vertrag kann Token nachdrucken. Wer die
+     Berechtigung hat, kann deinen Anteil beliebig verwaessern
+  X  blacklist(address): Sperrliste vorhanden. Deine Adresse kann vom
+     Handel ausgeschlossen werden - du haeltst dann etwas, das du nicht
+     mehr verkaufen kannst
+
+-- Warnungen -----------------------------------------------------------
+  !  setSellTax(uint256): Verkaufsgebuehr nachtraeglich aenderbar - der
+     klassische Weg, einen Ausstieg unwirtschaftlich zu machen
+```
+
+**Ein wichtiges Detail:** Ist der Besitzer abgegeben (`owner = 0x0`), stuft
+das Werkzeug gefährliche Funktionen herunter - sie sind dann meist nicht
+mehr aufrufbar. Ein Vertrag mit `mint` und abgegebenen Rechten ist etwas
+anderes als einer mit `mint` und aktivem Besitzer.
+
+### Robinhood Chain im Detail
+
+| | |
+|---|---|
+| Ketten-ID | 4663 |
+| RPC | `https://rpc.mainnet.chain.robinhood.com` (fest eingebaut) |
+| Explorer | `https://robinhoodchain.blockscout.com` |
+| Technik | Arbitrum Orbit / Nitro, voll EVM-kompatibel |
+| Größte Börse | Uniswap v4 (~50% des Volumens) |
+
+Der öffentliche Knoten ist schon hinterlegt - du musst nichts eintragen.
+Willst du einen eigenen (schneller, höhere Limits), dann:
+
+```bash
+export EVM_RPC_URL="https://dein-knoten"
+```
+
+In PowerShell dauerhaft:
+
+```powershell
+[Environment]::SetEnvironmentVariable("EVM_RPC_URL", "https://dein-knoten", "User")
+```
+
+Ebenfalls eingebaut: Ethereum (1), Base (8453), Arbitrum (42161).
+
+### Was diese Prüfung nicht leistet
+
+- **Kein Honeypot-Test.** Ein echter Test würde einen Verkauf simulieren -
+  das braucht Router-Kenntnis und ein finanziertes Konto. Diese Prüfung
+  fängt die häufigen, groben Fälle ab, nicht den gut versteckten Honeypot.
+- **Die Suche findet, was im Code steht.** Ein Vertrag kann eine Funktion
+  besitzen, ohne sie je zu benutzen. Umgekehrt versteckt ein Proxy alles -
+  deshalb ist ein Proxy allein schon ein Ausschlusskriterium.
+- **Keine Halterverteilung.** Dafür bräuchte es einen Indexer, ein reiner
+  Knotenabruf gibt das nicht her.
+
+### Keccak-256 im Projekt
+
+Um Funktionen im Bytecode zu finden, braucht es deren Selektor: die ersten
+vier Bytes von `keccak256("mint(address,uint256)")`. Pythons `hashlib` kann
+das nicht - `sha3_256` ist der finale SHA-3-Standard mit anderer Polsterung
+als das von Ethereum verwendete Original-Keccak. Weil das Projekt ohne
+externe Abhängigkeiten auskommen soll, steht die Implementierung in
+`radar/keccak.py` und ist gegen die offiziellen Testvektoren geprüft
+(`tests/test_evm.py`).
+
+---
+
 ## Lagebericht alle paar Stunden
 
 ```bash
@@ -591,9 +683,11 @@ radar/
   dossier.py   Pre-Launch-Dossier und dessen Darstellung
   news.py      Nachrichtenlage ueber Google-News-RSS
   digest.py    Periodischer Lagebericht
+  evm.py       Vertragspruefung fuer EVM-Ketten (Bytecode, Besitzer, Proxy)
+  keccak.py    Keccak-256 in reinem Python (fuer Funktionsselektoren)
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         161 Tests: python3 -m unittest discover -s tests
+tests/         189 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

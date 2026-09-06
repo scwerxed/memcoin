@@ -15,6 +15,8 @@ from .monitor import Monitor, MonitorConfig, Watchlist
 from .digest import rendere as rendere_digest
 from .digest import rendere_telegram, sammle
 from .dossier import erstelle_dossier, rendere
+from .evm import EvmRpc, knoten_fuer
+from .evm import token_report as evm_report
 from .news import News
 from .notify import build_notifiers
 from .prelaunch import CallRegister, bewerte_promoter
@@ -38,8 +40,29 @@ def _rpc(settings: Settings) -> SolanaRpc:
     return SolanaRpc(url, HttpClient(settings.request_timeout, interval))
 
 
-def _contract_report(settings: Settings, rug: RugCheck, mint: str) -> dict | None:
-    """Vertragspruefung aus beiden Quellen, jede fuer ihren zuverlaessigen Teil."""
+def _contract_report(settings: Settings, rug: RugCheck, mint: str,
+                     kette: str = "solana") -> dict | None:
+    """Vertragspruefung - je nach Kette ueber unterschiedliche Wege.
+
+    Solana kennt Mint- und Freeze-Authority, EVM-Ketten nicht. Dort steckt
+    das Risiko im Vertragscode selbst, also wird der geprueft.
+    """
+    kette = (kette or "solana").lower()
+
+    if kette != "solana":
+        knoten = knoten_fuer(kette, os.environ.get("EVM_RPC_URL"))
+        if knoten is None:
+            return None
+        url, name = knoten
+        try:
+            bericht = evm_report(
+                EvmRpc(url, HttpClient(settings.request_timeout, 0.2)), mint)
+        except SourceError:
+            return None
+        if bericht:
+            bericht.setdefault("evm_hinweise", []).insert(0, f"Kette: {name}")
+        return bericht
+
     rpc_bericht = None
     try:
         rpc_bericht = _rpc(settings).token_report(mint)
@@ -85,7 +108,8 @@ def cmd_check(args: argparse.Namespace, settings: Settings) -> int:
         print("oder es gibt (noch) keinen Pool - dann kannst du auch nicht verkaufen.")
         return 1
 
-    report = None if args.no_contract else _contract_report(settings, rug, snap.mint)
+    report = (None if args.no_contract else
+              _contract_report(settings, rug, snap.mint, snap.chain))
     verdict = evaluate(snap, settings.thresholds, report)
     print(render_verdict(verdict))
 

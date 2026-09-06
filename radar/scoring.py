@@ -216,6 +216,24 @@ def _apply_contract_report(verdict: Verdict, report: dict | None) -> None:
         return
 
     verdict.contract_checked = True
+
+    # EVM-Ketten: andere Gefahren, eigener Auswertungsweg.
+    if report.get("_quelle") == "evm":
+        for gewicht, text in report.get("evm_risiken") or []:
+            if gewicht >= 100:
+                verdict.hard_fails.append(text)
+            elif gewicht >= 40:
+                verdict.warnings.append(text)
+            else:
+                verdict.contract_notes.append(text)
+        verdict.contract_notes.extend(report.get("evm_hinweise") or [])
+        verdict.contract_notes.append(
+            "Quelle: Vertragscode auf der Kette. Geprueft wurden vorhandene "
+            "Gefahrenfunktionen, Besitzrechte und Aufruestbarkeit - ein "
+            "Verkaufstest (Honeypot) ist damit nicht abgedeckt"
+        )
+        return
+
     token = report.get("token") or {}
     if report.get("_quelle") == "rpc":
         verdict.contract_notes.append(
