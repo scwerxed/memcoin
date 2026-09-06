@@ -104,39 +104,60 @@ class TestMenueAufrufe(unittest.TestCase):
             menu._eingabe = original
 
     def test_check_with_bankroll(self):
-        argv = self._mit_eingaben(["MINT123", "5000"], "1")
+        argv = self._mit_eingaben(["MINT123", "5000"], "3")
         self.assertEqual(argv, ["check", "MINT123", "--bankroll", "5000.0"])
 
     def test_check_without_bankroll(self):
-        self.assertEqual(self._mit_eingaben(["MINT123", ""], "1"), ["check", "MINT123"])
+        self.assertEqual(self._mit_eingaben(["MINT123", ""], "3"), ["check", "MINT123"])
 
     def test_check_without_address_is_rejected(self):
-        self.assertIsNone(self._mit_eingaben([""], "1"))
+        self.assertIsNone(self._mit_eingaben(["", ""], "3"))
 
     def test_invalid_bankroll_is_dropped_not_crashing(self):
-        argv = self._mit_eingaben(["MINT123", "keine-zahl"], "1")
+        argv = self._mit_eingaben(["MINT123", "keine-zahl"], "3")
         self.assertEqual(argv, ["check", "MINT123"])
 
     def test_scan_only_passing(self):
-        self.assertIn("--only-passing", self._mit_eingaben(["j"], "2"))
-        self.assertNotIn("--only-passing", self._mit_eingaben(["n"], "2"))
+        self.assertIn("--only-passing", self._mit_eingaben(["j"], "4"))
+        self.assertNotIn("--only-passing", self._mit_eingaben(["n"], "4"))
 
     def test_demo_and_setup(self):
-        self.assertEqual(menu._baue_aufruf("6"), ["demo"])
-        self.assertEqual(menu._baue_aufruf("7"), ["setup"])
+        self.assertEqual(menu._baue_aufruf("8"), ["demo"])
+        self.assertEqual(menu._baue_aufruf("9"), ["setup"])
 
     def test_unknown_choice(self):
         self.assertIsNone(menu._baue_aufruf("99"))
 
+    def test_prelaunch_call_entry(self):
+        original_mehr = menu._mehrzeilig
+        menu._mehrzeilig = lambda text: "Sende 0.5 SOL an die Presale Wallet"
+        try:
+            argv = self._mit_eingaben(["MoonCat", "@king", "MCAT", "telegram"], "1")
+        finally:
+            menu._mehrzeilig = original_mehr
+        self.assertEqual(argv[:6],
+                         ["call", "add", "--name", "MoonCat", "--promoter", "@king"])
+        self.assertIn("--ticker", argv)
+        self.assertIn("--text", argv)
+
+    def test_prelaunch_needs_name_and_promoter(self):
+        self.assertIsNone(self._mit_eingaben(["MoonCat", ""], "1"))
+        self.assertIsNone(self._mit_eingaben(["", "@king"], "1"))
+
+    def test_call_submenu(self):
+        self.assertEqual(self._mit_eingaben(["a"], "2"), ["call", "promoters"])
+        self.assertEqual(self._mit_eingaben(["d"], "2"), ["call", "match"])
+
     def test_every_generated_call_parses(self):
+
         """Die zusammengebauten Argumente muessen vom Parser akzeptiert werden."""
         from radar.cli import build_parser
 
         faelle = [
-            (["MINT123", "5000"], "1"),
-            (["j"], "2"),
-            (["5000", "", "45000", "1.5", "35"], "4"),
-            ([], "6"),
+            (["MINT123", "5000"], "3"),
+            (["j"], "4"),
+            (["5000", "", "45000", "1.5", "35"], "6"),
+            ([], "8"),
         ]
         parser = build_parser()
         for eingaben, wahl in faelle:
@@ -149,11 +170,11 @@ class TestMenueAufrufe(unittest.TestCase):
         from radar.cli import build_parser
 
         parser = build_parser()
-        argv = self._mit_eingaben(["a"], "5")
+        argv = self._mit_eingaben(["a"], "7")
         self.assertEqual(argv, ["paper", "stats"])
         parser.parse_args(argv)
 
-        argv = self._mit_eingaben(["b", "MINT", "WIF", "0.001", "75", "35", "telegram"], "5")
+        argv = self._mit_eingaben(["b", "MINT", "WIF", "0.001", "75", "35", "telegram"], "7")
         args = parser.parse_args(argv)
         self.assertEqual(args.symbol, "WIF")
         self.assertEqual(args.source, "telegram")

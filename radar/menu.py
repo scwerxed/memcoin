@@ -21,13 +21,15 @@ KOPF = r"""
 """
 
 PUNKTE = [
-    ("1", "Token prüfen        - jemand hat dir eine Adresse geschickt"),
-    ("2", "Markt durchsuchen   - was besteht gerade die Filter"),
-    ("3", "Monitor starten     - läuft dauerhaft, meldet Fundstücke"),
-    ("4", "Positionsgröße      - wie viel darf ich setzen"),
-    ("5", "Meine Trades        - Journal und Auswertung"),
-    ("6", "Beispiel ansehen    - Ausgabe ohne Internet"),
-    ("7", "Einrichtung         - Zugänge eintragen und testen"),
+    ("1", "Ankündigung prüfen  - jemand kündigt einen Coin VOR dem Launch an"),
+    ("2", "Calls verwalten     - Liste, Promoter-Bilanz, Abgleich mit Launches"),
+    ("3", "Token prüfen        - der Coin ist schon gestartet"),
+    ("4", "Markt durchsuchen   - was besteht gerade die Filter"),
+    ("5", "Monitor starten     - läuft dauerhaft, meldet Fundstücke"),
+    ("6", "Positionsgröße      - wie viel darf ich setzen"),
+    ("7", "Meine Trades        - Journal und Auswertung"),
+    ("8", "Beispiel ansehen    - Ausgabe ohne Internet"),
+    ("9", "Einrichtung         - Zugänge eintragen und testen"),
     ("0", "Beenden"),
 ]
 
@@ -53,6 +55,27 @@ def _zahl(text: str, standard: float) -> float:
             print("  Bitte eine Zahl eingeben, z. B. 5000")
 
 
+def _mehrzeilig(text: str) -> str:
+    """Liest mehrere Zeilen bis zu einer Leerzeile.
+
+    Ankuendigungen sind fast immer mehrzeilig - eine einzelne input()-Zeile
+    wuerde den Text abschneiden und genau die Muster verlieren, um die es geht.
+    """
+    print(f"  {text}")
+    print("  (einfügen, dann Enter auf einer leeren Zeile)")
+    zeilen: list[str] = []
+    while True:
+        try:
+            zeile = input("  | ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not zeile.strip():
+            break
+        zeilen.append(zeile)
+    return "\n".join(zeilen)
+
+
 def _status() -> str:
     """Kurze Zustandszeile - was ist eingerichtet, was fehlt."""
     teile = []
@@ -76,7 +99,7 @@ def run_menu(dispatch: Callable[[list[str]], int]) -> int:
     """Hauptschleife. `dispatch` fuehrt eine Argumentliste aus."""
     print(KOPF)
     if not os.path.isfile(env_file.ENV_DATEI):
-        print("  Noch nichts eingerichtet. Punkt 7 macht das in zwei Minuten -")
+        print("  Noch nichts eingerichtet. Punkt 9 macht das in zwei Minuten -")
         print("  du kannst aber auch sofort loslegen, es geht auch ohne.")
         print()
 
@@ -119,6 +142,27 @@ def run_menu(dispatch: Callable[[list[str]], int]) -> int:
 def _baue_aufruf(wahl: str) -> list[str] | None:
     """Uebersetzt eine Menueauswahl in Befehlszeilenargumente."""
     if wahl == "1":
+        name = _eingabe("Name des Projekts")
+        promoter = _eingabe("Wer kündigt es an? (Handle oder Kanalname)")
+        if not name or not promoter:
+            print("  Name und Ankündiger werden beide gebraucht.")
+            return None
+        argv = ["call", "add", "--name", name, "--promoter", promoter]
+        ticker = _eingabe("Kürzel, z. B. MCAT (leer = keins)")
+        if ticker:
+            argv += ["--ticker", ticker]
+        kanal = _eingabe("Wo angekündigt?", "telegram")
+        if kanal:
+            argv += ["--kanal", kanal]
+        text = _mehrzeilig("Ankündigungstext einfügen:")
+        if text:
+            argv += ["--text", text]
+        return argv
+
+    if wahl == "2":
+        return _call_menue()
+
+    if wahl == "3":
         mint = _eingabe("Token-Adresse (Mint)")
         if not mint:
             return None
@@ -131,14 +175,14 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
                 pass
         return argv
 
-    if wahl == "2":
+    if wahl == "4":
         nur = _eingabe("Nur was die Filter besteht? (j/n)", "j")
         argv = ["scan", "--limit", "25"]
         if nur.lower().startswith("j"):
             argv.append("--only-passing")
         return argv
 
-    if wahl == "3":
+    if wahl == "5":
         argv = ["monitor"]
         if os.environ.get("TELEGRAM_BOT_TOKEN"):
             if _eingabe("Meldungen auch per Telegram? (j/n)", "j").lower().startswith("j"):
@@ -146,7 +190,7 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
         argv += ["--log-file", "alarme.jsonl"]
         return argv
 
-    if wahl == "4":
+    if wahl == "6":
         argv = ["size", "--bankroll", str(_zahl("Dein Gesamtkapital in USD", 1000))]
         mint = _eingabe("Token-Adresse (leer = Liquidität von Hand eingeben)")
         if mint:
@@ -157,15 +201,33 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
         argv += ["--stop", str(_zahl("Stop in Prozent", 35))]
         return argv
 
-    if wahl == "5":
+    if wahl == "7":
         return _journal_menue()
 
-    if wahl == "6":
+    if wahl == "8":
         return ["demo"]
 
-    if wahl == "7":
+    if wahl == "9":
         return ["setup"]
 
+    return None
+
+
+def _call_menue() -> list[str] | None:
+    print("   a   Bilanz der Promoter    - wer kostet dich Geld")
+    print("   b   Alle Calls auflisten")
+    print("   c   Nur offene Calls       - noch nicht gestartet")
+    print("   d   Abgleich starten       - welche Calls sind inzwischen gestartet")
+    print()
+    wahl = _eingabe("Auswahl", "a").lower()
+    if wahl == "a":
+        return ["call", "promoters"]
+    if wahl == "b":
+        return ["call", "list"]
+    if wahl == "c":
+        return ["call", "list", "--open-only"]
+    if wahl == "d":
+        return ["call", "match"]
     return None
 
 

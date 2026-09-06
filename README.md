@@ -47,17 +47,19 @@ auf null geht, und zwingt dich zu einer Positionsgroesse, die du ueberlebst.
 3. Es erscheint ein Menü. Zahl tippen, Enter.
 
 ```
-   1   Token prüfen        - jemand hat dir eine Adresse geschickt
-   2   Markt durchsuchen   - was besteht gerade die Filter
-   3   Monitor starten     - läuft dauerhaft, meldet Fundstücke
-   4   Positionsgröße      - wie viel darf ich setzen
-   5   Meine Trades        - Journal und Auswertung
-   6   Beispiel ansehen    - Ausgabe ohne Internet
-   7   Einrichtung         - Zugänge eintragen und testen
+   1   Ankündigung prüfen  - jemand kündigt einen Coin VOR dem Launch an
+   2   Calls verwalten     - Liste, Promoter-Bilanz, Abgleich mit Launches
+   3   Token prüfen        - der Coin ist schon gestartet
+   4   Markt durchsuchen   - was besteht gerade die Filter
+   5   Monitor starten     - läuft dauerhaft, meldet Fundstücke
+   6   Positionsgröße      - wie viel darf ich setzen
+   7   Meine Trades        - Journal und Auswertung
+   8   Beispiel ansehen    - Ausgabe ohne Internet
+   9   Einrichtung         - Zugänge eintragen und testen
    0   Beenden
 ```
 
-Fang mit **6** an - das zeigt dir an drei Beispielen, was das Werkzeug
+Fang mit **8** an - das zeigt dir an drei Beispielen, was das Werkzeug
 ausgibt, ohne dass irgendetwas eingerichtet sein muss.
 
 Wenn Python fehlt, sagt dir `start.bat` das und wo du es herbekommst. Bei
@@ -65,7 +67,7 @@ der Windows-Installation muss **"Add Python to PATH"** angekreuzt sein.
 
 ### Zugänge eintragen (optional, Menüpunkt 7)
 
-Punkt **7** fragt die Zugänge nacheinander ab, **prüft jeden sofort** und
+Punkt **9** fragt die Zugänge nacheinander ab, **prüft jeden sofort** und
 speichert sie in einer Datei `.env` im selben Ordner. Danach nie wieder.
 
 Alles daran ist freiwillig - jede Frage lässt sich mit Enter überspringen.
@@ -98,7 +100,7 @@ Unter Windows in PowerShell heisst der Befehl `python` statt `python3`
 
 ### Zugänge ohne den Assistenten
 
-Statt Menüpunkt 7 gehen auch Umgebungsvariablen - oder eine von Hand
+Statt Menüpunkt 9 gehen auch Umgebungsvariablen - oder eine von Hand
 angelegte `.env` im Projektordner:
 
 ```
@@ -115,7 +117,10 @@ Bereits gesetzte Umgebungsvariablen haben Vorrang vor der Datei.
 
 | Befehl | Zweck |
 |---|---|
-| `check <mint>` | Einzelnen Token vollstaendig pruefen |
+| `call add` | Ankuendigung vor dem Launch erfassen und pruefen |
+| `call match` | Offene Calls mit gestarteten Token verknuepfen |
+| `call promoters` | Bilanz: welcher Promoter kostet dich Geld |
+| `check <mint>` | Einzelnen Token vollstaendig pruefen (nach dem Launch) |
 | `scan` | Neue und beworbene Token durchsuchen und filtern |
 | `size` | Positionsgroesse und Preiseinfluss berechnen |
 | `math` | Erwartungswert und Ruinrisiko durchrechnen |
@@ -167,6 +172,85 @@ python3 run.py paper open --mint <mint> --symbol WIF --price 0.0012 \
 python3 run.py paper close --id 1 --price 0.0031
 python3 run.py paper stats
 ```
+
+---
+
+## Ankündigungen vor dem Launch
+
+```bash
+python3 run.py call add --name "MoonCat Inu" --ticker MCAT \
+    --promoter "@cryptoking_calls" --kanal telegram \
+    --text "hier den Ankündigungstext einfügen"
+```
+
+### Warum das anders funktioniert als alles andere hier
+
+Vor dem Start existiert der Token nicht auf der Blockchain. Keine
+Liquidität, kein Mint-Konto, keine Halterverteilung - **damit ist keines
+der harten Ausschlusskriterien anwendbar.** Was existiert, sind
+ausschliesslich Behauptungen.
+
+Deshalb ist dieser Teil kein Chancenfinder, sondern ein Betrugsdetektor.
+Er wird oft "nicht überprüfbar" ausgeben. Das ist das korrekte Ergebnis,
+kein Mangel des Werkzeugs.
+
+Prüfbar sind genau drei Dinge:
+
+**1. Der Ankündigungstext.** Manche Formulierungen deuten nicht auf ein
+Risiko hin, sie *sind* der Betrug. Die wichtigste: die Aufforderung, vor
+dem Start Geld an eine Adresse zu schicken. Es gibt dann noch keinen
+Token, den du dafür bekommen könntest - nur ein Versprechen. Wer die
+Adresse kontrolliert, kann das Geld behalten, und niemand kann es
+zurückholen. Kein weiterer Prüfschritt wiegt das auf.
+
+Weitere Muster mit Gewichtung: garantierte Rendite, Empfehlungssystem
+(Schneeballstruktur), behauptete Börsenlistings, Insider-Versprechen,
+künstlicher Zeitdruck, Aufforderung zur Privatnachricht, unbelegte
+Audit- und Team-Behauptungen.
+
+**2. Ob das Kürzel schon vielfach existiert.** Betrugsfabriken verwenden
+dieselben Namen wieder. Ein Kürzel, das bereits dutzendfach vergeben und
+fast überall tot ist, ist ein Muster.
+
+**3. Die Bilanz des Promoters.** Das ist der eigentliche Wert - und der
+einzige Teil, der Zeit braucht.
+
+### Die Promoter-Bilanz
+
+Jeder erfasste Call wird beim Abgleich automatisch mit dem tatsächlich
+gestarteten Token verknüpft, und die vollständige Analyse läuft in dem
+Moment, in dem es echte Daten gibt:
+
+```bash
+python3 run.py call match        # welche Calls sind inzwischen gestartet
+python3 run.py call promoters    # was ist daraus geworden
+```
+
+```
+  @cryptoking_calls
+    14 Calls   9 gestartet   3 nie gestartet   8 beim Start NO-GO
+    -> 92% der Calls waren wertlos - dieser Quelle zu folgen kostet Geld
+```
+
+Nach zwanzig, dreissig Calls steht dort schwarz auf weiss, ob eine Quelle
+dir Geld verdient oder kostet. Das ist überprüfbares Wissen über genau den
+Kanal, dem du folgst - und nicht dessen Selbstauskunft.
+
+Bis dahin gilt: **Call erfassen, nicht vorab kaufen, nach dem Start prüfen
+lassen.** Dann gibt es echte Daten - und die Bilanz füllt sich nebenbei.
+
+### Nachrichtenlage
+
+Über Google-News-RSS (kostenlos, ohne Schlüssel) wird nach Erwähnungen und
+gezielt nach Betrugsmeldungen zum Namen gesucht.
+
+Zur Einordnung: Bei einem frischen Memecoin ist *keine* Berichterstattung
+der Normalfall und kein schlechtes Zeichen. Aussagekraft hat nur der
+umgekehrte Fall - wenn zu einem angeblich brandneuen Projekt bereits
+Betrugsmeldungen existieren.
+
+X/Twitter ist nicht dabei: dafür gibt es seit 2023 keinen kostenlosen
+Zugang mehr, und inoffizielle Umgehungen brechen ständig.
 
 ---
 
@@ -431,9 +515,12 @@ radar/
   menu.py      Menuegefuehrte Bedienung
   wizard.py    Gefuehrte Einrichtung mit Verbindungstest
   env_file.py  Laedt und speichert Zugangsdaten in .env
+  prelaunch.py Call-Register, Betrugsmuster im Text, Promoter-Bilanz
+  dossier.py   Pre-Launch-Dossier und dessen Darstellung
+  news.py      Nachrichtenlage ueber Google-News-RSS
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         114 Tests: python3 -m unittest discover -s tests
+tests/         147 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:

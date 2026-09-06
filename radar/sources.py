@@ -134,6 +134,28 @@ class HttpClient:
         raise SourceError(f"Knoten nicht erreichbar: {type(last_error).__name__}")
 
 
+    def get_text(self, url: str, retries: int = 2) -> str:
+        """Roher Text - fuer RSS und andere Nicht-JSON-Quellen."""
+        headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
+        last_error: Exception | None = None
+
+        for attempt in range(retries):
+            self.limiter.wait()
+            request = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                    return response.read().decode("utf-8", errors="replace")
+            except urllib.error.HTTPError as exc:
+                if 400 <= exc.code < 500 and exc.code != 429:
+                    raise SourceError(f"HTTP {exc.code}") from None
+                last_error = exc
+            except (urllib.error.URLError, TimeoutError) as exc:
+                last_error = exc
+            time.sleep(2 ** attempt)
+
+        raise SourceError(f"nicht erreichbar: {type(last_error).__name__}")
+
+
 def _as_pair_list(payload: Any) -> list[dict]:
     """DexScreener liefert je nach Endpoint {'pairs': [...]}, [...] oder null."""
     if payload is None:

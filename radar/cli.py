@@ -11,7 +11,10 @@ from .config import Settings
 from .journal import Journal, format_timestamp
 from .model import TokenSnapshot
 from .monitor import Monitor, MonitorConfig, Watchlist
+from .dossier import erstelle_dossier, rendere
+from .news import News
 from .notify import build_notifiers
+from .prelaunch import CallRegister, bewerte_promoter
 from .onchain import PUBLIC_RPC, SolanaRpc, merge_reports
 from .report import render_plan, render_verdict
 from .risk import expectancy, plan_position, required_win_rate, risk_of_ruin
@@ -367,6 +370,134 @@ def cmd_setup(args: argparse.Namespace, settings: Settings) -> int:
     return run_setup(settings)
 
 
+def _register(args: argparse.Namespace) -> CallRegister:
+    return CallRegister(getattr(args, "calls_db", None) or "radar-calls.sqlite3")
+
+
+def cmd_call(args: argparse.Namespace, settings: Settings) -> int:
+    """Pre-Launch-Calls erfassen, pruefen und Promoter bewerten."""
+    dex, _ = _clients(settings)
+
+    with _register(args) as register:
+        if args.call_command == "add":
+            text = args.text
+            if args.text_datei:
+                try:
+                    with open(args.text_datei, encoding="utf-8") as handle:
+                        text = handle.read()
+                except OSError as exc:
+                    print(f"Textdatei nicht lesbar: {exc}", file=sys.stderr)
+                    return 2
+
+            call_id = register.add(
+                name=args.name, promoter=args.promoter, ticker=args.ticker,
+                kanal=args.kanal, start_geplant=args.start, promo_text=text,
+                presale_adresse=args.presale, notiz=args.notiz,
+            )
+            print(f"Call #{call_id} erfasst: {args.name}"
+                  + (f" [{args.ticker.upper()}]" if args.ticker else ""))
+            print()
+
+            bilanz = {b["promoter"]: b for b in register.promoter_bilanz()}
+            dossier = erstelle_dossier(
+                name=args.name, promoter=args.promoter, ticker=args.ticker,
+                promo_text=text, dex=None if args.offline else dex,
+                news=None if args.offline else News(),
+                promoter_eintrag=bilanz.get(args.promoter),
+            )
+            print(rendere(dossier))
+            return 1 if dossier.ist_toedlich else 0
+
+        if args.call_command == "list":
+            eintraege = register.liste(nur_offen=args.open_only)
+            if not eintraege:
+                print("Keine Calls erfasst.")
+                return 0
+            print(f"{'ID':>4} {'Name':<18} {'Kuerzel':<8} {'Promoter':<18} "
+                  f"{'Status':<12} {'Beim Start':<10}")
+            print("-" * 76)
+            for eintrag in eintraege:
+                start = "-"
+                if eintrag["score_beim_start"] is not None:
+                    start = ("NO-GO" if eintrag["ausschluss_beim_start"]
+                             else f"{eintrag['score_beim_start']}/100")
+                print(f"{eintrag['id']:>4} {(eintrag['name'] or '')[:18]:<18} "
+                      f"{(eintrag['ticker'] or '-')[:8]:<8} "
+                      f"{(eintrag['promoter'] or '')[:18]:<18} "
+                      f"{eintrag['status']:<12} {start:<10}")
+            return 0
+
+        if args.call_command == "promoters":
+            bilanz = register.promoter_bilanz()
+            if not bilanz:
+                print("Noch keine Calls erfasst.")
+                return 0
+            print("-- Bilanz nach Promoter " + "-" * 48)
+            print("  Schlechteste zuerst - das ist die Information, die zaehlt.")
+            print()
+            for eintrag in bilanz:
+                print(f"  {eintrag['promoter']}")
+                print(f"    {eintrag['calls']} Calls   "
+                      f"{eintrag['gelauncht']} gestartet   "
+                      f"{eintrag['verschwunden']} nie gestartet   "
+                      f"{eintrag['ausschluss']} beim Start NO-GO")
+                print(f"    -> {bewerte_promoter(eintrag)}")
+                print()
+            return 0
+
+        # match: offene Calls mit tatsaechlich gestarteten Token verknuepfen
+        offene = register.liste(nur_offen=True)
+        if not offene:
+            print("Keine offenen Calls.")
+            return 0
+
+        print(f"Suche zu {len(offene)} offenen Calls nach gestarteten Token ...")
+        print()
+        gefunden = 0
+        for eintrag in offene:
+            ticker = eintrag["ticker"]
+            if not ticker:
+                continue
+            try:
+                paare = dex.search(ticker)
+            except SourceError as exc:
+                print(f"  #{eintrag['id']}: Abruf fehlgeschlagen ({exc})")
+                continue
+
+            treffer = [
+                p for p in paare
+                if str((p.get("baseToken") or {}).get("symbol", "")).upper() == ticker
+                and (p.get("chainId") == settings.chain)
+            ]
+            if not treffer:
+                continue
+
+            treffer.sort(key=lambda p: float((p.get("liquidity") or {}).get("usd") or 0),
+                         reverse=True)
+            snap = TokenSnapshot.from_pair(treffer[0])
+            # Nur Paare, die nach der Ankuendigung entstanden sind - sonst
+            # verknuepfen wir einen alten, gleichnamigen Token.
+            if snap.created_at_ms and snap.created_at_ms / 1000 < eintrag["erfasst_am"] - 3600:
+                continue
+
+            verdict = evaluate(snap, settings.thresholds, None)
+            register.verknuepfe(eintrag["id"], snap.mint, verdict.score,
+                                verdict.stage.value, snap.liquidity_usd,
+                                bool(verdict.hard_fails))
+            gefunden += 1
+            urteil = "NO-GO" if verdict.hard_fails else f"{verdict.score}/100"
+            print(f"  #{eintrag['id']} {eintrag['name']} [{ticker}] ist gestartet")
+            print(f"     {snap.mint}")
+            print(f"     Beim Start: {urteil}, Phase {verdict.stage.value}, "
+                  f"Liquiditaet {snap.liquidity_usd:,.0f} USD")
+            print()
+
+        print(f"{gefunden} von {len(offene)} offenen Calls verknuepft.")
+        if gefunden:
+            print("Bilanz pro Promoter:  python3 run.py call promoters")
+        return 0
+
+
 def cmd_paper(args: argparse.Namespace, settings: Settings) -> int:
     with Journal(settings.journal_path) as journal:
         if args.paper_command == "open":
@@ -584,6 +715,31 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--once", action="store_true",
                          help="Nur einen Durchlauf (fuer cron oder Aufgabenplanung)")
     monitor.set_defaults(func=cmd_monitor)
+
+    call = sub.add_parser("call", help="Pre-Launch-Ankuendigungen erfassen und pruefen")
+    call.add_argument("--calls-db", default="radar-calls.sqlite3")
+    call_sub = call.add_subparsers(dest="call_command", required=True)
+
+    c_add = call_sub.add_parser("add", help="Ankuendigung erfassen und Dossier erstellen")
+    c_add.add_argument("--name", required=True, help="Projektname")
+    c_add.add_argument("--promoter", required=True,
+                       help="Wer hat es angekuendigt (Handle, Kanalname)")
+    c_add.add_argument("--ticker", help="Kuerzel, z. B. WIF")
+    c_add.add_argument("--kanal", help="Wo, z. B. telegram/x")
+    c_add.add_argument("--start", help="Angekuendigter Startzeitpunkt")
+    c_add.add_argument("--text", help="Der Ankuendigungstext")
+    c_add.add_argument("--text-datei", help="Datei mit dem Ankuendigungstext")
+    c_add.add_argument("--presale", help="Genannte Presale-Adresse, falls vorhanden")
+    c_add.add_argument("--notiz")
+    c_add.add_argument("--offline", action="store_true",
+                       help="Nur Textpruefung, keine Abfragen")
+
+    c_list = call_sub.add_parser("list", help="Erfasste Calls auflisten")
+    c_list.add_argument("--open-only", action="store_true")
+
+    call_sub.add_parser("promoters", help="Bilanz nach Promoter")
+    call_sub.add_parser("match", help="Offene Calls mit gestarteten Token verknuepfen")
+    call.set_defaults(func=cmd_call)
 
     setup = sub.add_parser("setup", help="Gefuehrte Einrichtung der Zugaenge")
     setup.set_defaults(func=cmd_setup)
