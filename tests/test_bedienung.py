@@ -104,26 +104,26 @@ class TestMenueAufrufe(unittest.TestCase):
             menu._eingabe = original
 
     def test_check_with_bankroll(self):
-        argv = self._mit_eingaben(["MINT123", "5000"], "3")
+        argv = self._mit_eingaben(["MINT123", "5000"], "4")
         self.assertEqual(argv, ["check", "MINT123", "--bankroll", "5000.0"])
 
     def test_check_without_bankroll(self):
-        self.assertEqual(self._mit_eingaben(["MINT123", ""], "3"), ["check", "MINT123"])
+        self.assertEqual(self._mit_eingaben(["MINT123", ""], "4"), ["check", "MINT123"])
 
     def test_check_without_address_is_rejected(self):
-        self.assertIsNone(self._mit_eingaben(["", ""], "3"))
+        self.assertIsNone(self._mit_eingaben(["", ""], "4"))
 
     def test_invalid_bankroll_is_dropped_not_crashing(self):
-        argv = self._mit_eingaben(["MINT123", "keine-zahl"], "3")
+        argv = self._mit_eingaben(["MINT123", "keine-zahl"], "4")
         self.assertEqual(argv, ["check", "MINT123"])
 
     def test_scan_only_passing(self):
-        self.assertIn("--only-passing", self._mit_eingaben(["j"], "4"))
-        self.assertNotIn("--only-passing", self._mit_eingaben(["n"], "4"))
+        self.assertIn("--only-passing", self._mit_eingaben(["j"], "5"))
+        self.assertNotIn("--only-passing", self._mit_eingaben(["n"], "5"))
 
     def test_demo_and_setup(self):
-        self.assertEqual(menu._baue_aufruf("8"), ["demo"])
-        self.assertEqual(menu._baue_aufruf("9"), ["setup"])
+        self.assertEqual(menu._baue_aufruf("9"), ["demo"])
+        self.assertEqual(menu._baue_aufruf("10"), ["setup"])
 
     def test_unknown_choice(self):
         self.assertIsNone(menu._baue_aufruf("99"))
@@ -144,6 +144,11 @@ class TestMenueAufrufe(unittest.TestCase):
         self.assertIsNone(self._mit_eingaben(["MoonCat", ""], "1"))
         self.assertIsNone(self._mit_eingaben(["", "@king"], "1"))
 
+    def test_report_entry(self):
+        argv = self._mit_eingaben(["n"], "3")
+        self.assertEqual(argv, ["report"])
+        self.assertIn("--kurz", self._mit_eingaben(["j"], "3"))
+
     def test_call_submenu(self):
         self.assertEqual(self._mit_eingaben(["a"], "2"), ["call", "promoters"])
         self.assertEqual(self._mit_eingaben(["d"], "2"), ["call", "match"])
@@ -154,10 +159,10 @@ class TestMenueAufrufe(unittest.TestCase):
         from radar.cli import build_parser
 
         faelle = [
-            (["MINT123", "5000"], "3"),
-            (["j"], "4"),
-            (["5000", "", "45000", "1.5", "35"], "6"),
-            ([], "8"),
+            (["MINT123", "5000"], "4"),
+            (["j"], "5"),
+            (["5000", "", "45000", "1.5", "35"], "7"),
+            ([], "9"),
         ]
         parser = build_parser()
         for eingaben, wahl in faelle:
@@ -170,11 +175,11 @@ class TestMenueAufrufe(unittest.TestCase):
         from radar.cli import build_parser
 
         parser = build_parser()
-        argv = self._mit_eingaben(["a"], "7")
+        argv = self._mit_eingaben(["a"], "8")
         self.assertEqual(argv, ["paper", "stats"])
         parser.parse_args(argv)
 
-        argv = self._mit_eingaben(["b", "MINT", "WIF", "0.001", "75", "35", "telegram"], "7")
+        argv = self._mit_eingaben(["b", "MINT", "WIF", "0.001", "75", "35", "telegram"], "8")
         args = parser.parse_args(argv)
         self.assertEqual(args.symbol, "WIF")
         self.assertEqual(args.source, "telegram")

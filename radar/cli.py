@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -11,6 +12,8 @@ from .config import Settings
 from .journal import Journal, format_timestamp
 from .model import TokenSnapshot
 from .monitor import Monitor, MonitorConfig, Watchlist
+from .digest import rendere as rendere_digest
+from .digest import rendere_telegram, sammle
 from .dossier import erstelle_dossier, rendere
 from .news import News
 from .notify import build_notifiers
@@ -498,6 +501,46 @@ def cmd_call(args: argparse.Namespace, settings: Settings) -> int:
         return 0
 
 
+def cmd_report(args: argparse.Namespace, settings: Settings) -> int:
+    """Lagebericht: was ist gerade auffaellig und was davon haelt stand."""
+    dex, _ = _clients(settings)
+    bericht = sammle(dex, settings, limit=args.limit)
+
+    text = rendere_digest(bericht, kurz=args.kurz)
+    print(text)
+
+    if args.datei:
+        stempel = time.strftime("%Y-%m-%d_%H%M", time.localtime(bericht.zeitpunkt))
+        pfad = args.datei.replace("{zeit}", stempel)
+        try:
+            with open(pfad, "a", encoding="utf-8") as handle:
+                handle.write(text + "\n\n")
+            print(f"\nGespeichert: {pfad}")
+        except OSError as exc:
+            print(f"Konnte Bericht nicht speichern: {exc}", file=sys.stderr)
+
+    if args.telegram:
+        from .notify import TelegramNotifier
+
+        try:
+            notifier = TelegramNotifier(
+                os.environ.get("TELEGRAM_BOT_TOKEN", ""),
+                os.environ.get("TELEGRAM_CHAT_ID", ""),
+            )
+            notifier.client.post_form(
+                f"https://api.telegram.org/bot{notifier._token}/sendMessage",
+                {"chat_id": notifier.chat_id,
+                 "text": rendere_telegram(bericht),
+                 "disable_web_page_preview": "true"},
+            )
+            print("\nPer Telegram verschickt.")
+        except (ValueError, SourceError) as exc:
+            print(f"Telegram fehlgeschlagen: {exc}", file=sys.stderr)
+            return 2
+
+    return 0
+
+
 def cmd_paper(args: argparse.Namespace, settings: Settings) -> int:
     with Journal(settings.journal_path) as journal:
         if args.paper_command == "open":
@@ -715,6 +758,15 @@ def build_parser() -> argparse.ArgumentParser:
     monitor.add_argument("--once", action="store_true",
                          help="Nur einen Durchlauf (fuer cron oder Aufgabenplanung)")
     monitor.set_defaults(func=cmd_monitor)
+
+    report = sub.add_parser("report", help="Lagebericht: was ist gerade auffaellig")
+    report.add_argument("--limit", type=int, default=30,
+                        help="Anzahl zu pruefender Token")
+    report.add_argument("--kurz", action="store_true", help="Nur die Kurzfassung")
+    report.add_argument("--telegram", action="store_true",
+                        help="Bericht zusaetzlich per Telegram schicken")
+    report.add_argument("--datei", help="Bericht anhaengen, {zeit} wird ersetzt")
+    report.set_defaults(func=cmd_report)
 
     call = sub.add_parser("call", help="Pre-Launch-Ankuendigungen erfassen und pruefen")
     call.add_argument("--calls-db", default="radar-calls.sqlite3")

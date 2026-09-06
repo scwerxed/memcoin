@@ -8,3 +8,5 @@ radar-watchlist.sqlite3
 monitor.log
 .env
 radar-calls.sqlite3
+berichte.txt
+berichte-fehler.log

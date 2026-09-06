@@ -23,13 +23,14 @@ KOPF = r"""
 PUNKTE = [
     ("1", "Ankündigung prüfen  - jemand kündigt einen Coin VOR dem Launch an"),
     ("2", "Calls verwalten     - Liste, Promoter-Bilanz, Abgleich mit Launches"),
-    ("3", "Token prüfen        - der Coin ist schon gestartet"),
-    ("4", "Markt durchsuchen   - was besteht gerade die Filter"),
-    ("5", "Monitor starten     - läuft dauerhaft, meldet Fundstücke"),
-    ("6", "Positionsgröße      - wie viel darf ich setzen"),
-    ("7", "Meine Trades        - Journal und Auswertung"),
-    ("8", "Beispiel ansehen    - Ausgabe ohne Internet"),
-    ("9", "Einrichtung         - Zugänge eintragen und testen"),
+    ("3", "Lagebericht         - was ist gerade heiß, was hält stand"),
+    ("4", "Token prüfen        - der Coin ist schon gestartet"),
+    ("5", "Markt durchsuchen   - was besteht gerade die Filter"),
+    ("6", "Monitor starten     - läuft dauerhaft, meldet Fundstücke"),
+    ("7", "Positionsgröße      - wie viel darf ich setzen"),
+    ("8", "Meine Trades        - Journal und Auswertung"),
+    ("9", "Beispiel ansehen    - Ausgabe ohne Internet"),
+    ("10", "Einrichtung         - Zugänge eintragen und testen"),
     ("0", "Beenden"),
 ]
 
@@ -99,7 +100,7 @@ def run_menu(dispatch: Callable[[list[str]], int]) -> int:
     """Hauptschleife. `dispatch` fuehrt eine Argumentliste aus."""
     print(KOPF)
     if not os.path.isfile(env_file.ENV_DATEI):
-        print("  Noch nichts eingerichtet. Punkt 9 macht das in zwei Minuten -")
+        print("  Noch nichts eingerichtet. Punkt 10 macht das in zwei Minuten -")
         print("  du kannst aber auch sofort loslegen, es geht auch ohne.")
         print()
 
@@ -163,6 +164,15 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
         return _call_menue()
 
     if wahl == "3":
+        argv = ["report"]
+        if _eingabe("Nur Kurzfassung? (j/n)", "n").lower().startswith("j"):
+            argv.append("--kurz")
+        if os.environ.get("TELEGRAM_BOT_TOKEN"):
+            if _eingabe("Auch per Telegram? (j/n)", "j").lower().startswith("j"):
+                argv.append("--telegram")
+        return argv
+
+    if wahl == "4":
         mint = _eingabe("Token-Adresse (Mint)")
         if not mint:
             return None
@@ -175,14 +185,14 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
                 pass
         return argv
 
-    if wahl == "4":
+    if wahl == "5":
         nur = _eingabe("Nur was die Filter besteht? (j/n)", "j")
         argv = ["scan", "--limit", "25"]
         if nur.lower().startswith("j"):
             argv.append("--only-passing")
         return argv
 
-    if wahl == "5":
+    if wahl == "6":
         argv = ["monitor"]
         if os.environ.get("TELEGRAM_BOT_TOKEN"):
             if _eingabe("Meldungen auch per Telegram? (j/n)", "j").lower().startswith("j"):
@@ -190,7 +200,7 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
         argv += ["--log-file", "alarme.jsonl"]
         return argv
 
-    if wahl == "6":
+    if wahl == "7":
         argv = ["size", "--bankroll", str(_zahl("Dein Gesamtkapital in USD", 1000))]
         mint = _eingabe("Token-Adresse (leer = Liquidität von Hand eingeben)")
         if mint:
@@ -201,13 +211,13 @@ def _baue_aufruf(wahl: str) -> list[str] | None:
         argv += ["--stop", str(_zahl("Stop in Prozent", 35))]
         return argv
 
-    if wahl == "7":
+    if wahl == "8":
         return _journal_menue()
 
-    if wahl == "8":
+    if wahl == "9":
         return ["demo"]
 
-    if wahl == "9":
+    if wahl == "10":
         return ["setup"]
 
     return None

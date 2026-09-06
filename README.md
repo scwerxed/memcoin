@@ -49,17 +49,18 @@ auf null geht, und zwingt dich zu einer Positionsgroesse, die du ueberlebst.
 ```
    1   Ankündigung prüfen  - jemand kündigt einen Coin VOR dem Launch an
    2   Calls verwalten     - Liste, Promoter-Bilanz, Abgleich mit Launches
-   3   Token prüfen        - der Coin ist schon gestartet
-   4   Markt durchsuchen   - was besteht gerade die Filter
-   5   Monitor starten     - läuft dauerhaft, meldet Fundstücke
-   6   Positionsgröße      - wie viel darf ich setzen
-   7   Meine Trades        - Journal und Auswertung
-   8   Beispiel ansehen    - Ausgabe ohne Internet
-   9   Einrichtung         - Zugänge eintragen und testen
+   3   Lagebericht         - was ist gerade heiß, was hält stand
+   4   Token prüfen        - der Coin ist schon gestartet
+   5   Markt durchsuchen   - was besteht gerade die Filter
+   6   Monitor starten     - läuft dauerhaft, meldet Fundstücke
+   7   Positionsgröße      - wie viel darf ich setzen
+   8   Meine Trades        - Journal und Auswertung
+   9   Beispiel ansehen    - Ausgabe ohne Internet
+  10   Einrichtung         - Zugänge eintragen und testen
    0   Beenden
 ```
 
-Fang mit **8** an - das zeigt dir an drei Beispielen, was das Werkzeug
+Fang mit **9** an - das zeigt dir an drei Beispielen, was das Werkzeug
 ausgibt, ohne dass irgendetwas eingerichtet sein muss.
 
 Wenn Python fehlt, sagt dir `start.bat` das und wo du es herbekommst. Bei
@@ -67,7 +68,7 @@ der Windows-Installation muss **"Add Python to PATH"** angekreuzt sein.
 
 ### Zugänge eintragen (optional, Menüpunkt 7)
 
-Punkt **9** fragt die Zugänge nacheinander ab, **prüft jeden sofort** und
+Punkt **10** fragt die Zugänge nacheinander ab, **prüft jeden sofort** und
 speichert sie in einer Datei `.env` im selben Ordner. Danach nie wieder.
 
 Alles daran ist freiwillig - jede Frage lässt sich mit Enter überspringen.
@@ -100,7 +101,7 @@ Unter Windows in PowerShell heisst der Befehl `python` statt `python3`
 
 ### Zugänge ohne den Assistenten
 
-Statt Menüpunkt 9 gehen auch Umgebungsvariablen - oder eine von Hand
+Statt Menüpunkt 10 gehen auch Umgebungsvariablen - oder eine von Hand
 angelegte `.env` im Projektordner:
 
 ```
@@ -121,6 +122,7 @@ Bereits gesetzte Umgebungsvariablen haben Vorrang vor der Datei.
 | `call match` | Offene Calls mit gestarteten Token verknuepfen |
 | `call promoters` | Bilanz: welcher Promoter kostet dich Geld |
 | `check <mint>` | Einzelnen Token vollstaendig pruefen (nach dem Launch) |
+| `report` | Lagebericht: was ist gerade auffaellig, was haelt stand |
 | `scan` | Neue und beworbene Token durchsuchen und filtern |
 | `size` | Positionsgroesse und Preiseinfluss berechnen |
 | `math` | Erwartungswert und Ruinrisiko durchrechnen |
@@ -172,6 +174,76 @@ python3 run.py paper open --mint <mint> --symbol WIF --price 0.0012 \
 python3 run.py paper close --id 1 --price 0.0031
 python3 run.py paper stats
 ```
+
+---
+
+## Lagebericht alle paar Stunden
+
+```bash
+python3 run.py report --telegram --datei berichte.txt
+```
+
+### Was "hyped" hier bedeutet
+
+Wer nach heißen Coins sucht, findet vor allem bezahlte Platzierung -
+Börsen-Blogs mit Titeln wie "100x Coins to Watch" verdienen am
+Handelsvolumen, nicht an deiner Trefferquote. Das ist Werbung, keine
+Recherche.
+
+Messbar ist Hype trotzdem, auf zwei Wegen, die beide auf der Kette stehen:
+
+- **Bezahlte Bewerbung.** Wer einen Boost kauft, bezahlt dafür, dass du
+  den Token siehst. Kein Qualitätssignal - aber ein zuverlässiger Hinweis
+  darauf, wohin in den nächsten Stunden Retail-Fluss strömt.
+- **Umschlag.** Volumen im Verhältnis zur Liquidität zeigt, wo tatsächlich
+  Kapital bewegt wird statt nur geredet.
+
+Der Bericht trennt beides von der Frage, ob man den Token anfassen sollte.
+Diese beiden Fragen fallen fast nie zusammen - genau darum geht es:
+
+```
+-- Am staerksten beworben ----------------------------------------------
+ X  MOONPUMP    15/100  blowoff   Liq   120k  1h  +500.0%  Kauf  90%   (1200 Boosts)
+    STEADY      65/100  momentum  Liq   120k  1h   +12.0%  Kauf  53%   (400 Boosts)
+```
+
+Der meistbeworbene Token ist hier der, der durchfällt. Das ist der
+Normalfall, nicht die Ausnahme.
+
+### Alle 3 Stunden automatisch
+
+**Windows** - einmal in PowerShell, dann läuft es dauerhaft:
+
+```powershell
+schtasks /create /tn "Memecoin-Lagebericht" /sc hourly /mo 3 /tr "C:\Pfad\zu\memcoin\bericht.bat"
+```
+
+Den Pfad anpassen. `bericht.bat` liegt im Ordner und erledigt den Rest.
+Prüfen mit `schtasks /query /tn "Memecoin-Lagebericht"`, entfernen mit
+`schtasks /delete /tn "Memecoin-Lagebericht" /f`.
+
+**macOS/Linux** - `crontab -e`, dann diese Zeile:
+
+```
+17 */3 * * * cd /pfad/zu/memcoin && /usr/bin/python3 run.py report --telegram --datei berichte.txt
+```
+
+Minute 17 statt 0 ist Absicht: um Punkt laufen alle Zeitpläne der Welt
+gleichzeitig los.
+
+Für Telegram müssen `TELEGRAM_BOT_TOKEN` und `TELEGRAM_CHAT_ID` gesetzt
+sein (Menüpunkt 10). Ohne sie erscheint der Bericht nur in der Datei.
+
+### Bericht und Monitor sind nicht dasselbe
+
+| | Bericht | Monitor |
+|---|---|---|
+| Läuft | alle paar Stunden kurz | dauerhaft |
+| Meldet | Lage insgesamt, auch wenn nichts gut ist | nur einzelne Fundstücke |
+| Antwortet auf | "was ist gerade los" | "sag mir Bescheid, wenn etwas auffällt" |
+
+Beides parallel ist sinnvoll: der Monitor für den Einzelfall, der Bericht
+für den Überblick.
 
 ---
 
@@ -518,9 +590,10 @@ radar/
   prelaunch.py Call-Register, Betrugsmuster im Text, Promoter-Bilanz
   dossier.py   Pre-Launch-Dossier und dessen Darstellung
   news.py      Nachrichtenlage ueber Google-News-RSS
+  digest.py    Periodischer Lagebericht
   report.py    Textausgabe
   cli.py       Kommandozeile
-tests/         147 Tests: python3 -m unittest discover -s tests
+tests/         161 Tests: python3 -m unittest discover -s tests
 ```
 
 Eigene Schwellenwerte:
